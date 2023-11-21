@@ -25,7 +25,7 @@ functions to initialize bass.dirs that need be initialized high up into the
 boot sequence to be able to backup/restore settings."""
 from __future__ import annotations
 
-import io, os
+import io
 from configparser import ConfigParser, MissingSectionHeaderError
 
 # Local - make sure that all imports here are carefully done in bash.py first
@@ -221,7 +221,6 @@ def init_dirs(personal, localAppData, game_info):
     #--Mod Data, Installers
     oblivionMods, oblivionModsSrc = getOblivionModsPath(game_info)
     dirs[u'bash_root'] = oblivionMods
-    dirs[u'launchers'] = dirs[u'bash_root'].join(u'Launchers')
     deprint(f'Game Mods location set to {oblivionMods}')
     dirs['modsBash'], modsBashSrc = _get_ini_path('BashModData', 'bash_root',
                                                   'Bash Mod Data')
@@ -247,7 +246,7 @@ def init_dirs(personal, localAppData, game_info):
     dirs[u'corruptBCFs'] = dirs[u'converters'].join(u'--Corrupt')
     # create bash user folders, keep these in order
     dir_keys = (u'modsBash', u'installers', u'converters', u'dupeBCFs',
-                u'corruptBCFs', u'bainData', u'bsaCache', u'launchers')
+                u'corruptBCFs', u'bainData', u'bsaCache')
     deprint(u'Checking if WB directories exist and creating them if needed:')
     try:
         for dir_key in dir_keys:

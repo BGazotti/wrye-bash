@@ -27,7 +27,7 @@ import os
 import shlex
 
 from . import BSAList, INIList, InstallersList, \
-    InstallersPanel, MasterList, ModList, SaveList, ScreensList, launchers
+    InstallersPanel, MasterList, ModList, SaveList, ScreensList
 # modules below define the __all__ directive
 from .app_buttons import *
 from .bsa_links import *
@@ -46,7 +46,8 @@ from .saves_links import *
 from .. import bass, bush
 from ..balt import BashStatusBar, MenuLink, SeparatorLink, UIList_Delete, \
     UIList_Hide, UIList_OpenItems, UIList_OpenStore, UIList_Rename
-from ..bolt import os_name, GPath
+from ..bolt import os_name
+from ..env import init_app_links
 from ..game import MergeabilityCheck
 from ..game.patch_game import PatchGame
 from ..gui import GuiImage
@@ -136,11 +137,9 @@ def InitStatusBar():
     all_links.extend(_tool_args(*at, display_launcher=bass.inisettings[
         'ShowAudioToolLaunchers']) for at in audio_tools.items())
     all_links.extend(_tool_args(*mt) for mt in misc_tools.items())
-    #--Custom Launchers
-    _all_launchers = launchers.retrieve_launchers()
-    for launcher_name in _all_launchers:
-        pth, img_path, shortcut_descr = _all_launchers[launcher_name].path, \
-            None, f'Launch {launcher_name}' # TODO icons
+    #--Custom Apps
+    for pth, img_path, shortcut_descr in init_app_links(
+            bass.dirs['mopy'].join('Apps')):
         if img_path is None:
             imgs = None # use the 'x' icon
         else:
