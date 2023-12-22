@@ -27,7 +27,7 @@ import subprocess
 import webbrowser
 from collections import defaultdict
 
-from . import tabInfo
+from . import tabInfo, launchers
 from .constants import colorInfo, settingDefaults
 from .dialogs import UpdateNotification
 from .. import balt, barb, bass, bolt, bosh, bush, exception

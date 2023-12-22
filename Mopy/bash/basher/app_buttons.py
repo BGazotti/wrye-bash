@@ -243,7 +243,6 @@ class AppButton(AppLauncher, StatusBarButton):
         return cls(exe_path, *args, **kwargs)
 
 class _ExeButton(ExeLauncher, AppButton):
-
     def _run_exe(self, exe_path, exe_args):
         popen = super()._run_exe(exe_path, exe_args)
         if self.wait:
