@@ -26,8 +26,9 @@ import shlex
 import subprocess
 import webbrowser
 from collections import defaultdict
+import shlex
 
-from . import tabInfo, launchers
+from . import tabInfo
 from .constants import colorInfo, settingDefaults
 from .dialogs import UpdateNotification
 from .. import balt, barb, bass, bolt, bosh, bush, exception
