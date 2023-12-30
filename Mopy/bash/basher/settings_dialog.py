@@ -1634,6 +1634,28 @@ class LaunchersPage(_AFixedPage):
             comp.editable = not disable
         self._is_creating_launcher = not disable
 
+    def _new_launcher_mode(self, disable: bool = False):
+        """'New Launcher Mode' is basically disabling the listbox, the 'New'
+        button and changing the Remove button into a Cancel button.
+        Pass disable = True to return to the normal view (i.e. when calling it
+        from Cancel button)"""
+        # Add text/tooltip to textboxes
+        if not disable:
+            self._reset_textfields()
+        for comp in self._launcher_listbox, self._new_launcher_btn:
+            comp.enabled = disable
+        self._remove_launcher_btn.button_label = _('Remove') if disable else _('Cancel')
+        # enable cancel button
+        self._remove_launcher_btn.enabled = not disable
+        # enable editing textboxes if they're disabled
+        for comp in self._launcher_args_txt, self._launcher_name_txt, self._launcher_path_txt:
+            comp.editable = not disable
+        self._is_creating_launcher = not disable
+
+        # Apologies for the low readability of the above code with all that not
+        # disable nonsense. It is, however, much more succinct like this. Just
+        # know we're toggling that alternate text mode.
+
     def _save_launcher(self):
         # get values to save from text boxes.
         # If path of current launcher is invalid, like <new>, show error dialog
