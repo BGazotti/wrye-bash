@@ -1567,7 +1567,8 @@ class LaunchersPage(_AFixedPage):
             HorizontalLine(self),
             self._launcher_name_txt,
             HLayout(spacing=2, item_expand=True, items=[
-                (self._launcher_path, LayoutOptions(weight=1)),
+                (self._launcher_path_txt, LayoutOptions(weight=1)),
+                self._pick_launcher_file_btn
             ]),
             self._launcher_args_txt,
             HLayout(spacing=4, item_expand=True, items=[
