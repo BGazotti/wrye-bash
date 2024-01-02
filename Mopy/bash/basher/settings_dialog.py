@@ -1673,15 +1673,18 @@ class LaunchersPage(_AFixedPage):
         launcher_name = self._launcher_name_txt.text_content
         launcher_path = self._launcher_path_txt.text_content
         launcher_args = self._launcher_args_txt.text_content
+        bass.settings['bash.launchers'][launcher_name] = [launcher_path,
+                                                          launcher_args,]
 
         if not (launcher_name or launcher_path):
             balt.showError(self, _('Launcher name and path cannot be empty.'))
-            return
-
-        bass.settings['bash.launchers'][launcher_name] = [launcher_path,
-                                                          launcher_args,]
-        self._new_launcher_mode(False)
-        self._cleanup()
+        #    return
+        from .app_buttons import AppButton
+        launcher = AppButton.app_button_factory(None,
+            GPath_no_norm(self._launcher_path.text_field.text_content), None,
+            uid=launcher_name, cli_args=()) #todo -> self._launcher_args_txt.text_content
+        BashStatusBar.all_sb_links[launcher_name] = launcher
+        Link.Frame.statusBar.add_buttons(launcher)
         self._populate_launcher_listbox()
         if launcher_name in BashStatusBar.all_sb_links:
             #TODO error out if name already exists, prompt user to edit existing instead
