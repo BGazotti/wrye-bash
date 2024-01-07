@@ -1578,7 +1578,10 @@ class LaunchersPage(_AFixedPage):
         ])]).apply_to(self)
 
     def _populate_launcher_listbox(self):
-        self._launcher_listbox.lb_set_items(self.___filter())
+        items = self.___filter()
+        for custom_launcher in bass.settings['bash.launchers']:
+            items.append(custom_launcher)
+        self._launcher_listbox.lb_set_items(items)
         #TODO retrieve launchers from settings
 
     def ___filter(self): ##: todo temp we want to include all sb links that can be hidden
@@ -1589,7 +1592,7 @@ class LaunchersPage(_AFixedPage):
         # if selected launcher is one of the preconfigured ones:
         #   make name and args not editable;
         #   change remove to reset which will restore the default path
-        if selected_str in BashStatusBar.all_sb_links:
+        if selected_str in BashStatusBar.all_sb_links: #TODO diff stock/custom
             self._launcher_name_txt.editable = False
             self._launcher_args_txt.editable = False
             self._remove_launcher_btn.button_label = _('Reset')
@@ -1656,6 +1659,7 @@ class LaunchersPage(_AFixedPage):
         # disable nonsense. It is, however, much more succinct like this. Just
         # know we're toggling that alternate text mode.
 
+    ## TODO validation/error handling
     def _save_launcher(self):
         # get values to save from text boxes.
         # If path of current launcher is invalid, like <new>, show error dialog
@@ -1683,11 +1687,10 @@ class LaunchersPage(_AFixedPage):
                              title=_('Remove Launcher'), default_is_yes=False):
             # user canceled in confirm dialog
             return
-        return
         launcher_name = self._launcher_name_txt.text_content
         if launcher_name in (_(u'<New...>'), u''):  # again, can't do that
             return
-        launchers.remove_launcher(launcher_name)
+        del bass.settings['bash.launchers'][launcher_name]
         self._clear_textfields()
         self._populate_launcher_listbox()
 

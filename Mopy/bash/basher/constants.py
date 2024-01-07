@@ -442,6 +442,8 @@ settingDefaults = { # keep current naming format till refactored
     'bash.mods.export.skip': '',
     'bash.mods.export.deprefix': '',
     'bash.mods.export.skipcomments': False,
+    #--Custom Launchers
+    'bash.launchers': {},
     #--Wrye Bash: Saves
     'bash.saves.cols': ['File', 'Modified', 'Size', 'PlayTime', 'Player',
                         'Cell'],
