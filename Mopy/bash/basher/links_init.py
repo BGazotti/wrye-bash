@@ -46,7 +46,7 @@ from .saves_links import *
 from .. import bass, bush
 from ..balt import BashStatusBar, MenuLink, SeparatorLink, UIList_Delete, \
     UIList_Hide, UIList_OpenItems, UIList_OpenStore, UIList_Rename
-from ..bolt import os_name
+from ..bolt import GPath, os_name
 from ..env import init_app_links
 from ..game import MergeabilityCheck
 from ..game.patch_game import PatchGame
@@ -138,17 +138,26 @@ def InitStatusBar():
         'ShowAudioToolLaunchers']) for at in audio_tools.items())
     all_links.extend(_tool_args(*mt) for mt in misc_tools.items())
     #--Custom Apps
-    for pth, img_path, shortcut_descr in init_app_links(
-            bass.dirs['mopy'].join('Apps')):
-        if img_path is None:
-            imgs = None # use the 'x' icon
-        else:
-            imgs = [__fp(p, GuiImage.img_types['.ico'], x) for x, p in
-                    zip((16, 24, 32), img_path)]
+    #retrieve launchers
+    #find an icon
+    #get app_key -> what is this????
+    # add AppButton to all_links.
+    for launcher_name in bass.settings['bash.launchers']:
+        launcher_path, launcher_args = bass.settings['bash.launchers'][launcher_name]
+        all_links.append(AppButton(GPath(launcher_path), badIcons,
+            _(f'Run {launcher_name}'), launcher_name,cli_args=shlex.split(launcher_args), canHide=False))
+
+    #for pth, img_path, shortcut_descr in init_app_links(
+        #    bass.dirs['mopy'].join('Apps')):
+        #if img_path is None:
+        #    imgs = badIcons # use the 'x' icon
+        #else:
+        #    imgs = [__fp(p, GuiImage.img_types['.ico'], x) for x, p in
+        #            zip((16, 24, 32), img_path)]
         #target.stail would keep the id on renaming the .lnk but this is unique
-        app_key = pth.stail.lower()
-        all_links.append(LnkButton.app_button_factory(app_key, pth, None,
-            imgs, shortcut_desc, app_key, canHide=False))
+        #app_key = pth.stail.lower()
+        #all_links.append(LnkButton(pth, imgs, shortcut_descr, app_key,
+        #                           canHide=False))
     #--Final couple
     all_links.append(DocBrowserButton('DocBrowser'))
     all_links.append(PluginCheckerButton('ModChecker'))

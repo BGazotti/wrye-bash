@@ -1533,6 +1533,14 @@ class TrustedBinariesPage(_AFixedPage):
 class LaunchersPage(_AFixedPage):
     """Create, delete and toggle app launchers."""
 
+    # this might be useful to separate preconfigured
+    # from custom launchers - though I'm seriously
+    # considering treating them all the same and allow
+    # editing for everything. If people want to break their
+    # shortcuts I wouldn't get in their way especially since
+    # doing so means more work
+    default_launchers = list()
+
     def __init__(self, parent, page_desc):
         super().__init__(parent, page_desc)
         self._is_creating_launcher = False
@@ -1592,7 +1600,7 @@ class LaunchersPage(_AFixedPage):
         # if selected launcher is one of the preconfigured ones:
         #   make name and args not editable;
         #   change remove to reset which will restore the default path
-        if selected_str in BashStatusBar.all_sb_links: #TODO diff stock/custom
+        if selected_str not in bass.settings['bash.launchers']: #TODO diff stock/custom
             self._launcher_name_txt.editable = False
             self._launcher_args_txt.editable = False
             self._remove_launcher_btn.button_label = _('Reset')
@@ -1601,10 +1609,15 @@ class LaunchersPage(_AFixedPage):
         selected_launcher = BashStatusBar.all_sb_links[selected_str]
         # copy launcher details to textfields
         self._launcher_name_txt.text_content = selected_str
-        self._launcher_path.text_field.text_content = (
-            selected_launcher.app_path.s)
-        self._launcher_args_txt.text_content = shlex.join(
-            selected_launcher.app_cli(()))
+        # FIXME unify launchers
+        if path_obj := getattr(selected_launcher, 'app_path',None):
+            # has a Path(TM)
+            self._launcher_path_txt.text_content = path_obj.s
+            self._launcher_args_txt.text_content = shlex.join(
+                selected_launcher.app_cli(()))
+        else:
+            (self._launcher_path_txt.text_content,
+             self._launcher_args_txt.text_content) = selected_launcher
 
     def _reset_textfields(self):
         self._launcher_path.text_field.text_content = _('Path to application')
@@ -1688,9 +1701,10 @@ class LaunchersPage(_AFixedPage):
             # user canceled in confirm dialog
             return
         launcher_name = self._launcher_name_txt.text_content
-        if launcher_name in (_(u'<New...>'), u''):  # again, can't do that
-            return
-        del bass.settings['bash.launchers'][launcher_name]
+        try:
+             del bass.settings['bash.launchers'][launcher_name]
+        except KeyError:
+            pass # FIXME exception-oriented crap
         self._clear_textfields()
         self._populate_launcher_listbox()
 

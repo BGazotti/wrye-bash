@@ -2159,8 +2159,9 @@ class SaveList(UIList):
     }
     #--Labels
     labels = {**_common_labels,
-        'PlayTime': lambda self, p: f'{(playMinutes := self.data_store[
-            p].header.gameTicks // 60000) // 60}:{playMinutes % 60:02d}',
+        'PlayTime': lambda self, p:
+        f'{(playMinutes := self.data_store[p].header.gameTicks // 60000) // 60}'
+        f':{playMinutes % 60:02d}',
         'Player': _ask_info('header.pcName'),
         'Cell': _ask_info('header.pcLocation'),
     }

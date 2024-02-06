@@ -57,6 +57,7 @@ boot_settings_defaults = {
 boot_settings = copy.deepcopy(boot_settings_defaults)
 
 # settings dictionary - belongs to a dedicated settings module below bolt - WIP !
+# bash.launchers: dict[name: str][path, args: str]
 settings = None # bolt.Settings !
 
 # restarting info

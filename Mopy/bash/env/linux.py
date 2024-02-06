@@ -340,8 +340,11 @@ class TaskDialog(object):
         raise EnvError(u'TaskDialog')
 
 class AppLauncher(_AppLauncher):
-    def launch_app(self, exe_path, exe_args):
+    def launch_app(self, exe_path: _Path, exe_args):
         kw = dict(close_fds=True, env=os.environ.copy())
+        if exe_path.cext == '.exe':  # win exec, run with wine/proton
+            return subprocess.Popen([_WINEPATH, exe_path.s, *exe_args],
+                close_fds=True, env=os.environ.copy())
         if os.access(exe_path, mode=os.X_OK):
             # we could run this if we tried so let's do it
             return subprocess.Popen([exe_path.s, *exe_args], **kw)
