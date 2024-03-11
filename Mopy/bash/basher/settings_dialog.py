@@ -1533,13 +1533,18 @@ class TrustedBinariesPage(_AFixedPage):
 class LaunchersPage(_AFixedPage):
     """Create, delete and toggle app launchers."""
 
+    @staticmethod
+    def ___filter():  ##: todo temp we want to include all sb links that can be hidden
+        return [k for k, v in BashStatusBar.all_sb_links.items() if
+                hasattr(v, 'app_cli')]
+
     # this might be useful to separate preconfigured
     # from custom launchers - though I'm seriously
     # considering treating them all the same and allow
     # editing for everything. If people want to break their
     # shortcuts I wouldn't get in their way especially since
     # doing so means more work
-    default_launchers = list()
+    default_launchers = ___filter()
 
     def __init__(self, parent, page_desc):
         super().__init__(parent, page_desc)
@@ -1561,7 +1566,7 @@ class LaunchersPage(_AFixedPage):
         self._remove_launcher_btn = Button(self, btn_label=_('Remove'),
             btn_tooltip=_('Remove currently selected launcher'))
         self._remove_launcher_btn.on_clicked.subscribe(self._remove_or_cancel)
-        self._remove_launcher_btn.enabled = False # nothing selected at start
+        self._remove_launcher_btn.enabled = False  # nothing selected at start
         self._new_launcher_btn = Button(self, btn_label=_('New'),
                                         btn_tooltip=_('Add a new launcher'))
         self._new_launcher_btn.on_clicked.subscribe(
@@ -1604,42 +1609,43 @@ class LaunchersPage(_AFixedPage):
             txt_field.text_content = ''
 
     def _populate_launcher_listbox(self):
-        items = list()
-        for custom_launcher in bass.settings['bash.launchers']:
-            items.append(custom_launcher)
+        items = self.___filter()
+        for launcher_name in bass.settings['bash.launchers']:
+            if launcher_name not in items:
+                items.append(launcher_name)  # avoids duplicating custom items
         self._launcher_listbox.lb_set_items(items)
-        #TODO retrieve launchers from settings
-
-    def ___filter(self): ##: todo temp we want to include all sb links that can be hidden
-        return [k for k, v in BashStatusBar.all_sb_links.items() if
-                hasattr(v, 'app_cli')]
 
     def _update_file_txt_field(self):
-        picked_file = FileOpen.display_dialog(self,
-            title=_('Choose app to launch'))
+        picked_file = FileOpen.display_dialog(parent=self,
+                                              title=_('Choose app to launch'))
         if picked_file:
             self._launcher_path_txt.text_content = str(picked_file)
 
     def _handle_launcher_selected(self, index: int, selected_str):
-        selected_launcher = bass.settings['bash.launchers'][selected_str]
-        self._remove_launcher_btn.enabled = True
-        self._save_launcher_btn.enabled = True
-
-        # copy launcher details to textfields
-        self._launcher_name_txt.text_content = selected_str
-        # FIXME unify launchers
-        if path_obj := getattr(selected_launcher, 'app_path', None):
-            # has a Path(TM)
-            self._launcher_path_txt.text_content = path_obj.s
-            self._launcher_args_txt.text_content = shlex.join(
-                selected_launcher.app_cli(()))
-        else:
+        # is predefined?
+        if selected_str in bass.settings['bash.launchers']:
+            selected_launcher = bass.settings['bash.launchers'][selected_str]
+            # copy launcher details to textfields
             (self._launcher_path_txt.text_content,
              self._launcher_args_txt.text_content) = selected_launcher
+            self._remove_launcher_btn.enabled = True
+            self._save_launcher_btn.enabled = True
+        else:
+            self._remove_launcher_btn.enabled = False
+            for comp in self._launcher_name_txt, self._launcher_args_txt:
+                comp.editable = False
+            app_as_button = BashStatusBar.all_sb_links[selected_str]
+            self._launcher_path_txt.text_content = app_as_button.app_path.cs
+            self._launcher_args_txt.text_content = ''
+            for arg in app_as_button._exe_args:  # FIXME dis ugly
+                self._launcher_args_txt.text_content += f'{arg} '
+            self._launcher_args_txt.text_content = self._launcher_args_txt. \
+                text_content[:-1]
+        self._launcher_name_txt.text_content = selected_str
 
     def _reset_textfields(self):
         self._launcher_path_txt.text_content = _('Path to application')
-        self._launcher_args_txt.text_content =_('Command line arguments')
+        self._launcher_args_txt.text_content = _('Command line arguments')
         self._launcher_name_txt.text_content = _('Shortcut name')
 
     def _new_launcher_mode(self, enable: bool = True):
@@ -1652,25 +1658,28 @@ class LaunchersPage(_AFixedPage):
             self._reset_textfields()
         for comp in self._launcher_listbox, self._new_launcher_btn:
             comp.enabled = not enable
-        self._remove_launcher_btn.button_label = _('Cancel') if enable else _('Remove')
+        self._remove_launcher_btn.button_label = _('Cancel') if enable \
+            else _('Remove')
         # enable cancel button
         self._remove_launcher_btn.enabled = enable
         # enable editing textboxes if they're disabled
-        for comp in self._launcher_args_txt, self._launcher_name_txt, self._launcher_path_txt:
+        for comp in (self._launcher_args_txt, self._launcher_name_txt,
+                     self._launcher_path_txt):
             comp.editable = enable
         self._is_creating_launcher = enable
 
-    ## TODO validation/error handling
+    # TODO validation/error handling
     def _save_launcher(self):
-        # get values to save from text boxes.
-        # If path of current launcher is invalid, like <new>, show error dialog
-        # Update list after confirmed save.
         launcher_name = self._launcher_name_txt.text_content
         launcher_path = self._launcher_path_txt.text_content
         launcher_args = self._launcher_args_txt.text_content
 
+        if not (launcher_name or launcher_path):
+            balt.showError(self, _('Launcher name and path cannot be empty.'))
+            return
+
         bass.settings['bash.launchers'][launcher_name] = [launcher_path,
-                                                              launcher_args,]
+                                                          launcher_args,]
         self._new_launcher_mode(False)
         self._cleanup()
         self._populate_launcher_listbox()
@@ -1687,7 +1696,7 @@ class LaunchersPage(_AFixedPage):
 
     def _remove_or_cancel(self):
         from ..gui import popups
-        if self._is_creating_launcher: # cancel
+        if self._is_creating_launcher:  # cancel
             self._new_launcher_mode(False)
             self._clear_textfields()
             return
