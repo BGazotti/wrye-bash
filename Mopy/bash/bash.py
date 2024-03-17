@@ -712,7 +712,7 @@ def _detect_game(opts, backup_bash_ini):
     #--They depend on setting the bash.ini and the game
     from . import initialization
     game_ini_path, init_warnings = initialization.init_dirs(
-        opts.personalPath, opts.localAppDataPath, bush_game)
+        opts.personalPath, opts.localAppDataPath, bush_game, bash_root=opts.oblivionMods)
     if init_warnings:
         warning_msg = _('The following (non-critical) warnings were found '
                         'during initialization:')

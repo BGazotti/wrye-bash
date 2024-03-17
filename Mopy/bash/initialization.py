@@ -105,7 +105,7 @@ def _get_ini_path(ini_key, dir_key, *args):
         src = 'Relative Path'
     return idata_path, src
 
-def init_dirs(personal, localAppData, game_info):
+def init_dirs(personal, localAppData, game_info, bash_root=''):
     """Initialize bass.dirs dictionary. We need the bash.ini and the game
     being set, so this is called upon setting the game. Global structures
     that need info on Bash / Game dirs should be initialized here and set
@@ -219,7 +219,8 @@ def init_dirs(personal, localAppData, game_info):
     dirs[u'tag_files'] = dirs[u'mods'].join(u'BashTags')
     dirs[u'ini_tweaks'] = dirs[u'mods'].join(u'INI Tweaks')
     #--Mod Data, Installers
-    oblivionMods, oblivionModsSrc = getOblivionModsPath(game_info)
+    oblivionMods = _get_cli_ini_path(bash_root, '-R', 'oblivionMods', game_info, getOblivionModsPath, "failed setting root","Specified bash root directory does not exist")
+    # oblivionMods, oblivionModsSrc = getOblivionModsPath(game_info)
     dirs[u'bash_root'] = oblivionMods
     deprint(f'Game Mods location set to {oblivionMods}')
     dirs['modsBash'], modsBashSrc = _get_ini_path('BashModData', 'bash_root',

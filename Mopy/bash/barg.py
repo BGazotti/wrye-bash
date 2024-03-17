@@ -45,7 +45,9 @@ def parse():
          'Use this argument if Wrye Bash is located outside of the game '
          'directory, and automatic detection failed to find it.')
     arg(pathGroup, '-o', '--oblivionPath', dest='oblivionPath')
-
+    # oblivionMods #
+    h = ('Specify the root directory for Wrye Bash managed files.')
+    arg(pathGroup, '-R', '--bash-root', dest='oblivionMods')
     ### User Path Group ###
     userPathGroup = parser.add_argument_group('User Directory Arguments',
         'These arguments allow you to specify your user directories in '
@@ -144,6 +146,7 @@ _short_to_long = {
     '-q': '--quiet-quit',
     '-r': '--restore',
     '-u': '--userPath',
+    '-R': '--bash-root',
 }
 
 def convert_to_long_options(sys_argv):
