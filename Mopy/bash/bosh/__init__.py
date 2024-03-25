@@ -3099,9 +3099,9 @@ class ModInfos(TableFileInfos):
         :param cached_ini_info: Can contain the result of calling
             get_bsas_from_inis, in which case calling that (fairly expensive)
             method will be skipped."""
-        try:
+        if cached_ini_info:
             available_bsas, bsa_lo, bsa_cause = cached_ini_info
-        except TypeError: # cached_ini_info is None - fetch it from disk
+        else: # cached_ini_info is None - fetch it from disk
             available_bsas, bsa_lo, bsa_cause = self.get_bsas_from_inis()
         # BSAs loaded based on plugin name load in the middle of the pack
         for i, p in enumerate(for_plugins):
