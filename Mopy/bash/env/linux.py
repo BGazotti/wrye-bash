@@ -344,7 +344,7 @@ class AppLauncher(_AppLauncher):
         kw = dict(close_fds=True, env=os.environ.copy())
         if exe_path.cext == '.exe':  # win exec, run with wine/proton
             return subprocess.Popen([_WINEPATH, exe_path.s, *exe_args],
-                close_fds=True, env=os.environ.copy())
+                **kw)
         if os.access(exe_path, mode=os.X_OK):
             # we could run this if we tried so let's do it
             return subprocess.Popen([exe_path.s, *exe_args], **kw)

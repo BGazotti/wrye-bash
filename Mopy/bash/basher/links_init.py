@@ -26,6 +26,9 @@ also defined in these functions."""
 import os
 import shlex
 
+import pefile
+import wx
+
 from . import BSAList, INIList, InstallersList, \
     InstallersPanel, MasterList, ModList, SaveList, ScreensList
 # modules below define the __all__ directive
@@ -46,11 +49,10 @@ from .saves_links import *
 from .. import bass, bush
 from ..balt import BashStatusBar, MenuLink, SeparatorLink, UIList_Delete, \
     UIList_Hide, UIList_OpenItems, UIList_OpenStore, UIList_Rename
-from ..bolt import GPath, os_name
-from ..env import init_app_links
+from ..bolt import GPath_no_norm, os_name
 from ..game import MergeabilityCheck
 from ..game.patch_game import PatchGame
-from ..gui import GuiImage
+from ..gui import GuiImage, get_image
 
 _is_oblivion = bush.game.fsName == 'Oblivion'
 _is_skyrim = bush.game.fsName == 'Skyrim'
@@ -137,27 +139,30 @@ def InitStatusBar():
     all_links.extend(_tool_args(*at, display_launcher=bass.inisettings[
         'ShowAudioToolLaunchers']) for at in audio_tools.items())
     all_links.extend(_tool_args(*mt) for mt in misc_tools.items())
-    #--Custom Apps
-    #retrieve launchers
-    #find an icon
-    #get app_key -> what is this????
-    # add AppButton to all_links.
+
+    from ..gui.extract_icon import ExtractIcon
     for launcher_name in bass.settings['bash.launchers']:
         launcher_path, launcher_args = bass.settings['bash.launchers'][launcher_name]
-        all_links.append(AppButton(GPath(launcher_path), badIcons,
+        # TODO pretty icons -> pefile?
+        # This is not trivial at all for non-Windows platforms, as it requires
+        # reading through a PE object file, counting how many icons it has
+        # embedded in it (there may be more than one)
+        # then appropriately retrieving one after calculating offsets
+        # and sending it over to wx or whatever so that it can be displayed.
+        #
+        # How about a big bold initial for the launcher's name instead? :')
+        # see: wx.IconLocation(path), might help
+        try:
+            if icon_data := ExtractIcon(filepath = launcher_path).get_raw_windows_preferred_icon():
+            # TODO what happens if there's no icon? None? Error?
+                launcher_icon = []
+                for value in (16, 24, 32):
+                    launcher_icon.append(wx.ImageFromBuffer(value, value, icon_data))
+            else: launcher_icon = [get_image('error_cross.16')] * 3
+        except pefile.PEFormatError:
+            launcher_icon = [get_image('error_cross.16')] * 3
+        all_links.append(AppButton(GPath_no_norm(launcher_path), launcher_icon,
             _(f'Run {launcher_name}'), launcher_name,cli_args=shlex.split(launcher_args), canHide=False))
-
-    #for pth, img_path, shortcut_descr in init_app_links(
-        #    bass.dirs['mopy'].join('Apps')):
-        #if img_path is None:
-        #    imgs = badIcons # use the 'x' icon
-        #else:
-        #    imgs = [__fp(p, GuiImage.img_types['.ico'], x) for x, p in
-        #            zip((16, 24, 32), img_path)]
-        #target.stail would keep the id on renaming the .lnk but this is unique
-        #app_key = pth.stail.lower()
-        #all_links.append(LnkButton(pth, imgs, shortcut_descr, app_key,
-        #                           canHide=False))
     #--Final couple
     all_links.append(DocBrowserButton('DocBrowser'))
     all_links.append(PluginCheckerButton('ModChecker'))

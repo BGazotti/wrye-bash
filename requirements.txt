@@ -11,7 +11,9 @@ https://raw.githubusercontent.com/wrye-bash/dev-tools/master/wheels/wxPython-4.2
 # For FOMOD schema validation
 lxml==5.1.0
 # For parsing download conditions when checking for updates
-packaging==23.2
+packaging~=24.0
+# For custom launcher icons on non-Windows platforms
+pefile~=2023.2.7; sys_platform != 'win32'
 # For PDF support in the doc browser
 PyMuPDF==1.23.26
 # For reflink copies (does not support Windows/ReFS yet)

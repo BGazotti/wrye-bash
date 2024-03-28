@@ -20,6 +20,8 @@
 #  https://github.com/wrye-bash
 #
 # =============================================================================
+import os
+import pathlib
 import shlex
 import subprocess
 import webbrowser
@@ -29,7 +31,7 @@ from .settings_dialog import SettingsDialog
 from .. import balt, bass, bolt, bosh, bush
 from ..balt import BoolLink, ItemLink, Link, SeparatorLink, BashStatusBar
 from ..bass import Store
-from ..bolt import undefinedPath
+from ..bolt import undefinedPath, GPath_no_norm
 from ..env import getJava, get_file_version, AppLauncher, get_registry_path, \
     ExeLauncher, LnkLauncher, set_cwd
 from ..gui import ClickableImage, EventResult, get_key_down, get_shift_down, \
@@ -220,6 +222,11 @@ class AppButton(AppLauncher, StatusBarButton):
             exe_path = app_launcher
             args = None, *args, _('Launch %(app_name)s') % {
                 'app_name': exe_path.stail}
+        elif isinstance(app_launcher, pathlib.Path) and app_launcher.exists() or\
+            isinstance(app_launcher, str) and pathlib.Path(app_launcher).exists():
+            exe_path = GPath_no_norm(app_launcher)  # TODO purge bolt.Path from this
+            args = None, *args, _('Launch %(app_name)s') % {
+                'app_name': exe_path.stail}
         elif kwargs.setdefault('display_launcher', True):
             exe_path, is_present = cls.find_launcher(app_launcher, app_key,
                                                      **path_kwargs)
@@ -232,13 +239,13 @@ class AppButton(AppLauncher, StatusBarButton):
             args = badIcons, *args[1:]
         if cls is not AppButton:
             return cls(exe_path, *args, **kwargs)
-        if exe_path.cext == '.exe':
+        if exe_path.endswith('.exe'):
             return _ExeButton(exe_path, *args, **kwargs)
-        if exe_path.cext == '.jar':
+        if exe_path.endswith('.jar'):
             return _JavaButton(exe_path, *args, **kwargs)
-        if exe_path.cext == '.lnk':
+        if exe_path.endswith('.lnk'):
             return LnkButton(exe_path, *args, **kwargs)
-        if exe_path.is_dir():
+        if os.path.isdir(exe_path):
             return _DirButton(exe_path, *args, **kwargs)
         return cls(exe_path, *args, **kwargs)
 

@@ -884,7 +884,7 @@ def GPathPurge():
 
 #------------------------------------------------------------------------------
 _conv_seps = None
-class Path(os.PathLike):
+class Path(os.PathLike):  # I would very much like to retire this
     """Paths are immutable objects that represent file directory paths.
      May be just a directory, filename or full path."""
 
@@ -1044,6 +1044,9 @@ class Path(os.PathLike):
         except AttributeError:
             self._cext = self.ext.lower()
             return self._cext
+
+    def endswith(self, string):  # i'll just leave this here
+        return self.stail.endswith(string)
 
     def replace_with_temp(self, temp_path: str | os.PathLike):
         """Replace this file with a temporary version created via TempFile or

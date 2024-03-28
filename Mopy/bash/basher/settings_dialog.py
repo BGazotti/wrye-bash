@@ -22,6 +22,7 @@
 # =============================================================================
 import io
 import os
+import pathlib
 import shlex
 import subprocess
 import webbrowser
@@ -1678,11 +1679,17 @@ class LaunchersPage(_AFixedPage):
 
         if not (launcher_name or launcher_path):
             balt.showError(self, _('Launcher name and path cannot be empty.'))
-        #    return
+            return
+        if not pathlib.Path(launcher_path).exists():
+            balt.showError(self, _('The provided path is invalid.'))
+            return
+        launcher_args = self._launcher_args_txt.text_content
+        bass.settings['bash.launchers'][launcher_name] = (launcher_path,
+                                                          launcher_args,)
         from .app_buttons import AppButton
         launcher = AppButton.app_button_factory(None,
-            GPath_no_norm(self._launcher_path.text_field.text_content), None,
-            uid=launcher_name, cli_args=()) #todo -> self._launcher_args_txt.text_content
+            self._launcher_path_txt.text_content, None,
+            uid=launcher_name, cli_args=shlex.split(launcher_args))
         BashStatusBar.all_sb_links[launcher_name] = launcher
         Link.Frame.statusBar.add_buttons(launcher)
         self._populate_launcher_listbox()
@@ -1711,6 +1718,12 @@ class LaunchersPage(_AFixedPage):
         launcher_name = self._launcher_name_txt.text_content
         if launcher_name in bass.settings['bash.launchers']:
             del bass.settings['bash.launchers'][launcher_name]
+            # TODO delete button from status bar.
+            try:
+                del Link.Frame._visible_buttons[launcher_name] # doesn't work
+                Link.Frame._draw_buttons()
+            except:
+                breakpoint()
         self._cleanup()
         self._populate_launcher_listbox()
 
