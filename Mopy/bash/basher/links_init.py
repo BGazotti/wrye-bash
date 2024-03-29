@@ -25,6 +25,7 @@ attributes which are populated here. Therefore the layout of the menus is
 also defined in these functions."""
 import os
 import shlex
+import threading
 
 import pefile
 import wx
@@ -49,7 +50,7 @@ from .saves_links import *
 from .. import bass, bush
 from ..balt import BashStatusBar, MenuLink, SeparatorLink, UIList_Delete, \
     UIList_Hide, UIList_OpenItems, UIList_OpenStore, UIList_Rename
-from ..bolt import GPath_no_norm, os_name
+from ..bolt import GPath_no_norm, os_name, deprint
 from ..game import MergeabilityCheck
 from ..game.patch_game import PatchGame
 from ..gui import GuiImage, get_image
@@ -140,29 +141,38 @@ def InitStatusBar():
         'ShowAudioToolLaunchers']) for at in audio_tools.items())
     all_links.extend(_tool_args(*mt) for mt in misc_tools.items())
 
+    # FIXME this is slow. Unusably slow. Even in parallel, there seems to be
+    # something about pefile that's incredibly slow and memory-hungry
+    # TODO native win32 handling for this
+    local_PE_threads = list()
+    local_lock = threading.Lock()
     from ..gui.extract_icon import ExtractIcon
+    def create_launcher_button(lpath: str, lname, largs):  # TODO get this out of here
+        
+        icons = (get_image('error_cross.16'),) * 3
+        deprint(f'Thread for {launcher_name} started')
+        try:
+            if icon_data := ExtractIcon(launcher_path).get_raw_windows_preferred_icon():
+                icons = []
+                for value in (16, 24, 32):
+                    icons.append(wx.Bitmap(wx.Image(value, value, icon_data)))
+        except pefile.PEFormatError:
+            pass  # no icon in this file
+        btn = AppButton(GPath_no_norm(lpath), icons,
+                _(f'Run {lname}'), lname,
+                cli_args=shlex.split(largs), canHide=False)
+        local_lock.acquire()
+        all_links.append(btn)
+        local_lock.release()
+
     for launcher_name in bass.settings['bash.launchers']:
         launcher_path, launcher_args = bass.settings['bash.launchers'][launcher_name]
-        # TODO pretty icons -> pefile?
-        # This is not trivial at all for non-Windows platforms, as it requires
-        # reading through a PE object file, counting how many icons it has
-        # embedded in it (there may be more than one)
-        # then appropriately retrieving one after calculating offsets
-        # and sending it over to wx or whatever so that it can be displayed.
-        #
-        # How about a big bold initial for the launcher's name instead? :')
-        # see: wx.IconLocation(path), might help
-        try:
-            if icon_data := ExtractIcon(filepath = launcher_path).get_raw_windows_preferred_icon():
-            # TODO what happens if there's no icon? None? Error?
-                launcher_icon = []
-                for value in (16, 24, 32):
-                    launcher_icon.append(wx.ImageFromBuffer(value, value, icon_data))
-            else: launcher_icon = [get_image('error_cross.16')] * 3
-        except pefile.PEFormatError:
-            launcher_icon = [get_image('error_cross.16')] * 3
-        all_links.append(AppButton(GPath_no_norm(launcher_path), launcher_icon,
-            _(f'Run {launcher_name}'), launcher_name,cli_args=shlex.split(launcher_args), canHide=False))
+        local_PE_threads.append((lthread := threading.Thread(target=create_launcher_button,
+            args=(launcher_path, launcher_name, launcher_args))))
+        lthread.start()
+
+    for lthread in local_PE_threads:
+        lthread.join()
     #--Final couple
     all_links.append(DocBrowserButton('DocBrowser'))
     all_links.append(PluginCheckerButton('ModChecker'))

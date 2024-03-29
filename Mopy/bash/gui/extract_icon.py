@@ -165,7 +165,7 @@ class ExtractIcon(object):
         If no suitable icon was found, None is returned.
         """
         group, icon = self.get_windows_preferred_icon()
-        if group != None and icon != None:
+        if group and icon:
             return self.export_raw(group, icon)
         else:
             return None
@@ -182,7 +182,7 @@ class ExtractIcon(object):
         return data
 
     def export_raw(self, entries, index = None):
-        if index is not None:
+        if index:
             entries = entries[index:index+1]
 
         ico = struct.pack('<HHH', 0, self.RES_ICON, len(entries))
