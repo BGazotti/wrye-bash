@@ -26,7 +26,7 @@
 import struct
 import pefile
 
-class ExtractIcon(object):
+class ExtractIcon():
     GRPICONDIRENTRY_format = ('GRPICONDIRENTRY',
         ('B,Width', 'B,Height','B,ColorCount','B,Reserved',
          'H,Planes','H,BitCount','I,BytesInRes','H,ID'))
@@ -37,7 +37,9 @@ class ExtractIcon(object):
 
     def __init__(self, filepath=None, pefile_pe=None):
         if filepath:
-            self.pe = pefile.PE(filepath)
+            self.pe = pefile.PE(filepath, fast_load=True)
+            self.pe.parse_data_directories(
+                pefile.DIRECTORY_ENTRY['IMAGE_DIRECTORY_ENTRY_RESOURCE'])
         elif pefile_pe:
             self.pe = pefile_pe
         else:
