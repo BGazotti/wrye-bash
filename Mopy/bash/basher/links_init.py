@@ -54,6 +54,7 @@ from ..bolt import GPath_no_norm, os_name, deprint
 from ..game import MergeabilityCheck
 from ..game.patch_game import PatchGame
 from ..gui import GuiImage, get_image
+from ..gui.extract_icon import ExtractIcon
 
 _is_oblivion = bush.game.fsName == 'Oblivion'
 _is_skyrim = bush.game.fsName == 'Skyrim'
@@ -144,23 +145,23 @@ def InitStatusBar():
     # FIXME this is slow. Unusably slow. Even in parallel, there seems to be
     # something about pefile that's incredibly slow and memory-hungry
     # TODO native win32 handling for this
+    # should be very straightforward by requesting resources
     local_PE_threads = list()
     local_lock = threading.Lock()
-    from ..gui.extract_icon import ExtractIcon
     def create_launcher_button(lpath: str, lname, largs):  # TODO get this out of here
-        
+
         icons = (get_image('error_cross.16'),) * 3
-        deprint(f'Thread for {launcher_name} started')
         try:
-            if icon_data := ExtractIcon(launcher_path).get_raw_windows_preferred_icon():
+            if icon_data := ExtractIcon(lpath).get_raw_windows_preferred_icon():
                 icons = []
                 for value in (16, 24, 32):
                     icons.append(wx.Bitmap(wx.Image(value, value, icon_data)))
         except pefile.PEFormatError:
             pass  # no icon in this file
+        # FIXME use AppButtonFactory?
         btn = AppButton(GPath_no_norm(lpath), icons,
-                _(f'Run {lname}'), lname,
-                cli_args=shlex.split(largs), canHide=False)
+                        _(f'Run {lname}'), lname,
+                        cli_args=largs, canHide=False)
         local_lock.acquire()
         all_links.append(btn)
         local_lock.release()
@@ -168,7 +169,7 @@ def InitStatusBar():
     for launcher_name in bass.settings['bash.launchers']:
         launcher_path, launcher_args = bass.settings['bash.launchers'][launcher_name]
         local_PE_threads.append((lthread := threading.Thread(target=create_launcher_button,
-            args=(launcher_path, launcher_name, launcher_args))))
+            args=(launcher_path, launcher_name, shlex.split(launcher_args)))))
         lthread.start()
 
     for lthread in local_PE_threads:

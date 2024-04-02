@@ -884,7 +884,7 @@ def GPathPurge():
 
 #------------------------------------------------------------------------------
 _conv_seps = None
-class Path(os.PathLike):  # I would very much like to retire this
+class Path(os.PathLike):
     """Paths are immutable objects that represent file directory paths.
      May be just a directory, filename or full path."""
 

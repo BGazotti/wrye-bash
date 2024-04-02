@@ -224,7 +224,7 @@ class AppButton(AppLauncher, StatusBarButton):
                 'app_name': exe_path.stail}
         elif isinstance(app_launcher, pathlib.Path) and app_launcher.exists() or\
             isinstance(app_launcher, str) and pathlib.Path(app_launcher).exists():
-            exe_path = GPath_no_norm(app_launcher)  # TODO purge bolt.Path from this
+            exe_path = GPath_no_norm(app_launcher)
             args = None, *args, _('Launch %(app_name)s') % {
                 'app_name': exe_path.stail}
         elif kwargs.setdefault('display_launcher', True):
