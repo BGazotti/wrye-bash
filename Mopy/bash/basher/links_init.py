@@ -23,6 +23,7 @@
 """Links initialization functions. Each panel's UIList has main and items Links
 attributes which are populated here. Therefore the layout of the menus is
 also defined in these functions."""
+import multiprocessing
 import os
 import shlex
 import threading
@@ -142,10 +143,9 @@ def InitStatusBar():
         'ShowAudioToolLaunchers']) for at in audio_tools.items())
     all_links.extend(_tool_args(*mt) for mt in misc_tools.items())
 
-    # FIXME this is slow. Unusably slow. Even in parallel, there seems to be
-    # something about pefile that's incredibly slow and memory-hungry
     # TODO native win32 handling for this
     # should be very straightforward by requesting resources
+    # TODO switch to concurrent.futures.ThreadPoolExecutor? more elegant
     local_PE_threads = list()
     local_lock = threading.Lock()
     def create_launcher_button(lpath: str, lname, largs):  # TODO get this out of here
@@ -153,14 +153,19 @@ def InitStatusBar():
         icons = (get_image('error_cross.16'),) * 3
         try:
             if icon_data := ExtractIcon(lpath).get_raw_windows_preferred_icon():
+                # -> this is an .ico file. Split icofrompath into two? Can't do that because wx expects a path
+                # very hacky: tmpfile? if only we could pass a fd instead of a path
+                # alternate hack: copy code from pillow's ico plugin? Might be
+                # a good call if we don't need any more code
                 icons = []
                 for value in (16, 24, 32):
+                    # TODO use bash-specific wrappers - win32 does not need wx
                     icons.append(wx.Bitmap(wx.Image(value, value, icon_data)))
         except pefile.PEFormatError:
-            pass  # no icon in this file
-        # FIXME use AppButtonFactory?
+            pass  # no icon in this file, or not an exe
+        # FIXME use AppButtonFactory? Maybe?
         btn = AppButton(GPath_no_norm(lpath), icons,
-                        _(f'Run {lname}'), lname,
+                        lname, lname,  # TODO custom tooltip
                         cli_args=largs, canHide=False)
         local_lock.acquire()
         all_links.append(btn)

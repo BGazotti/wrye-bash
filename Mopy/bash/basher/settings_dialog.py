@@ -45,7 +45,7 @@ from ..gui import ApplyButton, ATreeMixin, BusyCursor, Button, CancelButton, \
     ScrollableWindow, Spacer, Stretch, TextArea, TextField, TreePanel, \
     VBoxedLayout, VLayout, WrappingLabel, CENTER, VerticalLine, Spinner, \
     showOk, askYes, askText, showError, askWarning, showInfo, ImageButton, \
-    get_image, HyperlinkLabel, FilePicker
+    get_image, HyperlinkLabel, FilePicker, popups
 from ..update_checker import UpdateChecker, can_check_updates
 from ..wbtemp import default_global_temp_dir
 
@@ -1532,7 +1532,7 @@ class TrustedBinariesPage(_AFixedPage):
 
 # Launchers -------------------------------------------------------------------
 class LaunchersPage(_AFixedPage):
-    """Create, delete and toggle app launchers."""
+    """Create, delete and toggle (soon!) app launchers."""
 
     @staticmethod
     def ___filter():  ##: todo temp we want to include all sb links that can be hidden
@@ -1556,6 +1556,7 @@ class LaunchersPage(_AFixedPage):
         # Name, path and args
         self._launcher_path = FilePicker(self)
         self._launcher_path.button.tooltip = _('Select a file to launch.')
+        self._launcher_path.text_field.tooltip = _('Path to file')
         self._launcher_args_txt = TextField(self)
         self._launcher_args_txt.tooltip = _('Command line arguments')
         self._launcher_name_txt = TextField(self)
@@ -1583,10 +1584,7 @@ class LaunchersPage(_AFixedPage):
             (self._launcher_listbox, LayoutOptions(weight=1)),
             HorizontalLine(self),
             self._launcher_name_txt,
-            HLayout(spacing=2, item_expand=True, items=[
-                (self._launcher_path_txt, LayoutOptions(weight=1)),
-                self._pick_launcher_file_btn
-            ]),
+            self._launcher_path,
             self._launcher_args_txt,
             HLayout(spacing=4, item_expand=True, items=[
                 self._save_launcher_btn,
@@ -1595,6 +1593,7 @@ class LaunchersPage(_AFixedPage):
         ])]).apply_to(self)
 
     def _cleanup(self):
+        """Clears text fields and resets button labels."""
         # clear text fields
         self._clear_textfields()
         self._save_launcher_btn.button_label = _('Save')
@@ -1605,7 +1604,7 @@ class LaunchersPage(_AFixedPage):
         self._new_launcher_btn.tooltip = _('New launcher')
 
     def _clear_textfields(self):
-        for txt_field in (self._launcher_args_txt, self._launcher_path_txt,
+        for txt_field in (self._launcher_args_txt, self._launcher_path.text_field,
                           self._launcher_name_txt):
             txt_field.text_content = ''
 
@@ -1614,20 +1613,14 @@ class LaunchersPage(_AFixedPage):
         for launcher_name in bass.settings['bash.launchers']:
             if launcher_name not in items:
                 items.append(launcher_name)  # avoids duplicating custom items
-        self._launcher_listbox.lb_set_items(items)
-
-    def _update_file_txt_field(self):
-        picked_file = FileOpen.display_dialog(parent=self,
-                                              title=_('Choose app to launch'))
-        if picked_file:
-            self._launcher_path_txt.text_content = str(picked_file)
+            self._launcher_listbox.lb_set_items(items)
 
     def _handle_launcher_selected(self, index: int, selected_str):
         # is predefined?
         if selected_str in bass.settings['bash.launchers']:
             selected_launcher = bass.settings['bash.launchers'][selected_str]
             # copy launcher details to textfields
-            (self._launcher_path_txt.text_content,
+            (self._launcher_path.text_field.text_content,
              self._launcher_args_txt.text_content) = selected_launcher
             self._remove_launcher_btn.enabled = True
             self._save_launcher_btn.enabled = True
@@ -1636,16 +1629,16 @@ class LaunchersPage(_AFixedPage):
             for comp in self._launcher_name_txt, self._launcher_args_txt:
                 comp.editable = False
             app_as_button = BashStatusBar.all_sb_links[selected_str]
-            self._launcher_path_txt.text_content = app_as_button.app_path.cs
+            self._launcher_path.text_field.text_content = app_as_button.app_path.cs
             self._launcher_args_txt.text_content = ''
             for arg in app_as_button._exe_args:  # FIXME dis ugly
                 self._launcher_args_txt.text_content += f'{arg} '
             self._launcher_args_txt.text_content = self._launcher_args_txt. \
-                text_content[:-1]
+                text_content[:-1] # FIXME this is *very* ugly
         self._launcher_name_txt.text_content = selected_str
 
     def _reset_textfields(self):
-        self._launcher_path_txt.text_content = _('Path to application')
+        self._launcher_path.text_field.text_content = _('Path to application')
         self._launcher_args_txt.text_content = _('Command line arguments')
         self._launcher_name_txt.text_content = _('Shortcut name')
 
@@ -1705,7 +1698,6 @@ class LaunchersPage(_AFixedPage):
         self._populate_launcher_listbox()
 
     def _remove_or_cancel(self):
-        from ..gui import popups
         if self._is_creating_launcher:  # cancel
             self._new_launcher_mode(False)
             self._clear_textfields()
