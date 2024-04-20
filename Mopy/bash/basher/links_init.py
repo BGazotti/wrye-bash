@@ -56,6 +56,7 @@ from ..game import MergeabilityCheck
 from ..game.patch_game import PatchGame
 from ..gui import GuiImage, get_image
 from ..gui.extract_icon import ExtractIcon
+from ..gui.images import BmpFromStream, Ico2Bitmap, _IcoFromRaw
 
 _is_oblivion = bush.game.fsName == 'Oblivion'
 _is_skyrim = bush.game.fsName == 'Skyrim'
@@ -153,14 +154,18 @@ def InitStatusBar():
         icons = (get_image('error_cross.16'),) * 3
         try:
             if icon_data := ExtractIcon(lpath).get_raw_windows_preferred_icon():
-                # -> this is an .ico file. Split icofrompath into two? Can't do that because wx expects a path
-                # very hacky: tmpfile? if only we could pass a fd instead of a path
-                # alternate hack: copy code from pillow's ico plugin? Might be
-                # a good call if we don't need any more code
                 icons = []
+                #proto_img = Ico2Bitmap.conv(icon_data)
+                #bmp = wx.Image(*proto_img)
+                #bmp = wx.Bitmap(proto_img[2],proto_img[0],proto_img[1])
+                #bmp = wx.Image()
                 for value in (16, 24, 32):
-                    # TODO use bash-specific wrappers - win32 does not need wx
-                    icons.append(wx.Bitmap(wx.Image(value, value, icon_data)))
+                    # TODO get different sized objects
+                    poguinho = _IcoFromRaw(None, img_data=icon_data)
+                    icons.append(poguinho)
+                    #rsz=bmp.rescaled(value,value)
+                    #icons.append(bmp)
+                    #icons.append(wx.Bitmap(wx.Image(value, value, icon_data)))
         except pefile.PEFormatError:
             pass  # no icon in this file, or not an exe
         # FIXME use AppButtonFactory? Maybe?
