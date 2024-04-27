@@ -1077,8 +1077,9 @@ class Path(os.PathLike):
                            for x, _y, files in os.walk(self._s))
             except ValueError:
                 return 0
-        else:
-            return os.path.getsize(self._s)
+        elif os.path.islink(self._s):
+            return os.path.getsize(os.path.realpath(self._s))
+        return os.path.getsize(self._s)
 
     @property
     def atime(self):
