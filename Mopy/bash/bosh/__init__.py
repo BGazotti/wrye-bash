@@ -126,11 +126,12 @@ class MasterInfo:
     __slots__ = ('is_ghost', 'curr_name', 'mod_info', 'old_name',
                  'stored_size', '_was_esl', 'parent_mod_info')
 
-    def __init__(self, *, parent_minf, master_name, master_size, was_esl):
+    def __init__(self, *, parent_minf, master_name: FName, master_size,
+                 was_esl):
         self.parent_mod_info = parent_minf
         self.stored_size = master_size
         self._was_esl = was_esl
-        self.old_name = FName(master_name)
+        self.old_name = master_name
         self.mod_info = self.rename_if_present(master_name)
         if self.mod_info is None:
             self.curr_name = FName(master_name)
@@ -213,7 +214,6 @@ class FileInfo(AFileInfo):
     def __init__(self, fullpath, load_cache=False, **kwargs):
         self.header = None
         self.masterNames: tuple[FName, ...] = ()
-        self.masterOrder: tuple[FName, ...] = ()
         self.madeBackup = False
         # True if the masters for this file are not reliable
         self.has_inaccurate_masters = False
@@ -224,7 +224,6 @@ class FileInfo(AFileInfo):
     def _reset_masters(self):
         #--Master Names/Order
         self.masterNames = tuple(self._get_masters())
-        self.masterOrder = tuple() #--Reset to empty for now
 
     def _file_changed(self, stat_tuple):
         return (self.fsize, self.ftime, self.ctime) != stat_tuple
@@ -295,25 +294,22 @@ class FileInfo(AFileInfo):
         if self.madeBackup and not forceBackup: return
         #--Backup
         cop = self.get_store().copy_info
-        cop(self.fn_key, self.backup_dir)
+        cop(self.fn_key, self.backup_dir, self.fn_key)
         #--First backup
         firstBackup = self.backup_dir.join(self.fn_key) + 'f'
         if not firstBackup.exists():
             cop(self.fn_key, self.backup_dir, firstBackup.tail)
         self.madeBackup = True
 
-    def backup_restore_paths(self, first=False, fname=None):
+    def backup_restore_paths(self, first, fname=None) -> list[tuple[Path, Path]]:
         """Return a list of tuples, mapping backup paths to their restore
         destinations. If fname is not given returns the (first) backup
         filename corresponding to self.abs_path, else the backup filename
-        for fname mapped to its restore location in data_store.store_dir
-        :rtype: list[tuple]
-        """
+        for fname mapped to its restore location in data_store.store_dir."""
         restore_path = (fname and self.get_store().store_dir.join(
             fname)) or self.abs_path
         fname = fname or self.fn_key
-        return [(self.backup_dir.join(fname) + (u'f' if first else u''),
-                 restore_path)]
+        return [(self.backup_dir.join(fname + 'f' * first), restore_path)]
 
     def all_backup_paths(self, fname=None):
         """Return the list of all possible paths a backup operation may create.
@@ -1041,15 +1037,14 @@ class ModInfo(FileInfo):
         return old_new_paths
 
     def _masters_order_status(self, status):
-        self.masterOrder = tuple(load_order.get_ordered(self.masterNames))
-        loads_before_its_masters = self.masterOrder and \
-                                   load_order.cached_lo_index(
-            self.masterOrder[-1]) > load_order.cached_lo_index(self.fn_key)
-        if self.masterOrder != self.masterNames and loads_before_its_masters:
+        mo = tuple(load_order.get_ordered(self.masterNames)) # masterOrder
+        loads_before_its_masters = mo and load_order.cached_lo_index(
+            mo[-1]) > load_order.cached_lo_index(self.fn_key)
+        if mo != self.masterNames and loads_before_its_masters:
             return 21
         elif loads_before_its_masters:
             return 20
-        elif self.masterOrder != self.masterNames:
+        elif mo != self.masterNames:
             return 10
         else:
             return status
@@ -1271,17 +1266,17 @@ class SaveInfo(FileInfo):
     def get_store(cls): return saveInfos
 
     def _masters_order_status(self, status):
-        self.masterOrder = tuple(load_order.get_ordered(self.masterNames))
-        if self.masterOrder != self.masterNames:
+        mo = tuple(load_order.get_ordered(self.masterNames))
+        if mo != self.masterNames:
             return 20 # Reordered masters are far more important in saves
         elif status > 0:
             # Missing or reordered masters -> orange or red
             return status
         active_tuple = load_order.cached_active_tuple()
-        if self.masterOrder == active_tuple:
+        if mo == active_tuple:
             # Exact match with LO -> purple
             return -20
-        if self.masterOrder == active_tuple[:len(self.masterOrder)]:
+        if mo == active_tuple[:len(mo)]:
             # Matches LO except for new plugins at the end -> blue
             return -10
         else:
@@ -1355,7 +1350,7 @@ class SaveInfo(FileInfo):
                     abs(inst.abs_path.mtime - self.ftime) < 10]
         return u'\n'.join(co_ui_strings)
 
-    def backup_restore_paths(self, first=False, fname=None):
+    def backup_restore_paths(self, first, fname=None):
         """Return as parent and in addition back up paths for the cosaves."""
         back_to_dest = super(SaveInfo, self).backup_restore_paths(first, fname)
         # see if we have cosave backups - we must delete cosaves when restoring
@@ -1410,7 +1405,7 @@ class SaveInfo(FileInfo):
                     return [*map(FName, xse_cosave.get_master_list())]
         # Fall back on the regular masters - either the cosave is unnecessary,
         # doesn't exist or isn't accurate
-        return self.header.masters
+        return [*map(FName, self.header.masters)]
 
     def has_circular_masters(self, *, fake_masters: list[FName] | None = None):
         return False # Saves can't have circular masters
@@ -1608,7 +1603,8 @@ class _AFileInfos(DataStore):
                     self.corrupted[new] = cor = Corrupted(cor_path, er, **kws)
                     deprint(f'Failed to load {new} from {cor.abs_path}: {er}',
                             traceback=True)
-                    self.pop(new, None)
+                    if new := self.pop(new, None): # effectively deleted
+                        del_infos.add(new)
             rdata.to_del = {d.fn_key for d in del_infos}
         self.delete_refresh(del_infos, check_existence=False)
         if rdata.redraw:
@@ -1712,7 +1708,7 @@ class _AFileInfos(DataStore):
         return res
 
     #--Copy
-    def copy_info(self, fileName, destDir, destName=empty_path, set_mtime=None,
+    def copy_info(self, fileName, destDir, destName, set_mtime=None,
                   save_lo_cache=False):
         """Copies member file to destDir. Will overwrite! Will update
         internal self._data for the file if copied inside self.store_dir but the
@@ -1723,7 +1719,6 @@ class _AFileInfos(DataStore):
         :param set_mtime: if None self[fileName].ftime is copied to destination
         """
         destDir.makedirs()
-        if not destName: destName = fileName
         src_info = self[fileName]
         if destDir == self.store_dir and destName in self:
             destPath = self[destName].abs_path
@@ -1731,10 +1726,9 @@ class _AFileInfos(DataStore):
             destPath = destDir.join(destName)
         self._do_copy(src_info, destPath)
         if destDir == self.store_dir:
-            self._add_info(destDir, destName, set_mtime, fileName,
-                           save_lo_cache)
+            self._add_info(destName, set_mtime, fileName, save_lo_cache)
 
-    def _add_info(self, destDir, destName, set_mtime, fileNam, save_lo_cache):
+    def _add_info(self, destName, set_mtime, fileNam, save_lo_cache):
         # TODO(ut) : in duplicate pass the info in and load_cache=False
         return self.new_info(destName, notify_bain=True)
 
@@ -3172,9 +3166,8 @@ class ModInfos(TableFileInfos):
         bash_frame.warn_corrupted(warn_mods=True, warn_strings=True)
         return moved
 
-    def _add_info(self, destDir, destName, set_mtime, fileName,
-                  save_lo_cache=None):
-        inf = super()._add_info(destDir, destName, set_mtime, fileName, save_lo_cache)
+    def _add_info(self, destName, set_mtime, fileName, save_lo_cache):
+        inf = super()._add_info(destName, set_mtime, fileName, save_lo_cache)
         if set_mtime is not None:
             inf.setmtime(set_mtime) # correctly update table
         self.cached_lo_insert_after(fileName, destName)
@@ -3414,12 +3407,12 @@ class SaveInfos(TableFileInfos):
             co_file.abs_path = co_type.get_cosave_path(self[newName].abs_path)
         return old_key
 
-    def copy_info(self, fileName, destDir, destName=empty_path, set_mtime=None,
+    def copy_info(self, fileName, destDir, destName, set_mtime=None,
                   save_lo_cache=False):
         """Copies savefile and associated cosaves file(s)."""
         super().copy_info(fileName, destDir, destName, set_mtime)
         self.co_copy_or_move(self[fileName]._co_saves,
-                             destDir.join(destName or fileName))
+                             destDir.join(destName))
 
     @staticmethod
     def co_copy_or_move(co_instances, dest_path: Path, move_cosave=False):
@@ -3439,7 +3432,6 @@ class SaveInfos(TableFileInfos):
             if FName(d.stail) in moved:
                 co_instances = SaveInfo.get_cosaves_for_path(s)
                 self.co_copy_or_move(co_instances, d, move_cosave=True)
-                break
         for m in moved:
             try:
                 self.new_info(m, notify_bain=True) ##: why True??

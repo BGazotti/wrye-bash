@@ -369,7 +369,7 @@ class Save_DiffMasters(EnabledLink):
         else:
             message = u''
             if missing:
-                message += u'=== '+_(u'Removed Masters')+u' (%s):\n* ' % oldName
+                message += '=== ' + _('Removed Masters') + f' ({oldName}):\n* '
                 message += u'\n* '.join(load_order.get_ordered(missing))
                 if added: message += u'\n\n'
             if added:
@@ -698,7 +698,7 @@ class Save_Move(ChoiceLink):
                 if not result: continue
                 ask = ask and result != 2 # so don't warn for rest of operation
             if self.copyMode:
-                bosh.saveInfos.copy_info(fileName, destDir)
+                bosh.saveInfos.copy_info(fileName, destDir, fileName)
                 if fileName in savesTable:
                     destTable[fileName] = savesTable[fileName]
             else:
