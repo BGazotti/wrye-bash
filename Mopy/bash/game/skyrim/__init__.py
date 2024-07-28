@@ -26,6 +26,8 @@ from os.path import join as _j
 from ..patch_game import GameInfo, PatchGame
 from ..store_mixins import SteamMixin
 from ... import bolt
+from ..._games_lo import TextfileGame
+from ...bolt import FName
 
 class ASkyrimGameInfo(PatchGame):
     """GameInfo override for TES V: Skyrim."""
@@ -87,8 +89,8 @@ class ASkyrimGameInfo(PatchGame):
     class Ini(GameInfo.Ini):
         default_ini_file = u'Skyrim_default.ini'
         dropdown_inis = [u'Skyrim.ini', u'SkyrimPrefs.ini']
-        resource_archives_keys = (u'sResourceArchiveList',
-                                  u'sResourceArchiveList2')
+        start_dex_keys = {GameInfo.Ini.BSA_MIN: (
+            'sResourceArchiveList', 'sResourceArchiveList2')}
 
     class Bsa(GameInfo.Bsa):
         # Skyrim only accepts the base name
@@ -1470,6 +1472,11 @@ class ASkyrimGameInfo(PatchGame):
         b'SCEN', b'ASTP', b'OTFT', b'ARTO', b'MATO', b'MOVT', b'SNDR', b'DUAL',
         b'SNCT', b'SOPM', b'COLL', b'CLFM', b'REVB',
     ]
+
+    class _LoSkyrim(TextfileGame):
+        must_be_active_if_present = tuple(map(FName, ('Update.esm',
+            'Dawnguard.esm', 'HearthFires.esm', 'Dragonborn.esm')))
+    lo_handler = _LoSkyrim
 
     @classmethod
     def init(cls, _package_name=None):

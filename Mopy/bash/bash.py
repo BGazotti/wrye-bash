@@ -124,14 +124,14 @@ def _parse_boot_settings(curr_os: str):
                      f'broken: {e}', traceback=True)
         return
     bs_file = ini_files.TomlFile(boot_settings_path, ini_encoding='utf-8')
-    try:
-        for bs_section_key, bs_section in bass.boot_settings_defaults.items():
-            bs_dict = bass.boot_settings[bs_section_key]
-            for bs_setting_key, bs_setting_default in bs_section.items():
-                 bs_dict[bs_setting_key] = bs_file.getSetting(
-                     bs_section_key, bs_setting_key, bs_setting_default)
-    except FileNotFoundError:
-        pass # That's fine, just means no boot settings have been saved yet
+    for bs_section_key, bs_section in bass.boot_settings_defaults.items():
+        # ini file is missing if no boot settings are saved yet - that's fine
+        section = bs_file.get_ci_settings(missing_ok=True).get(
+            bs_section_key, {})
+        bs_dict = bass.boot_settings[bs_section_key]
+        for bs_setting_key, bs_setting_default in bs_section.items():
+            bs_dict[bs_setting_key] = section.get(bs_setting_key,
+                                                  (bs_setting_default,))[0]
     global _boot_settings
     _boot_settings = bs_file
 
@@ -632,8 +632,6 @@ def _main(opts, wx_locale, wxver):
     basher.InitImages()
     basher.links_init.InitStatusBar()
     basher.InitLinks()
-    #--Start application
-    bapp = basher.BashApp(bash_app)
     # Set the window title for stdout/stderr messages
     bash_app.SetOutputWindowAttributes(u'Wrye Bash stdout/stderr:')
     # Need to reference the locale object somewhere, so let's do it on the App
@@ -686,7 +684,8 @@ def _main(opts, wx_locale, wxver):
                 if gui.askYes(frame, '\n'.join(msg),
                               title=_('Unable to create backup!')):
                     return  # Quit
-    frame = bapp.Init() # Link.Frame is set here !
+    #--Start application
+    frame = basher.Init(bash_app)  # Link.Frame is set here !
     frame.ensureDisplayed()
     frame.bind_refresh()
     # Start the update check in the background and pass control to wx's event

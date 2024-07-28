@@ -26,7 +26,7 @@ Bash application is actually launched by the bash module.)
 
 This module is used to help split basher.py to a package without breaking
 the program. basher.py was organized starting with lower level elements,
-working up to higher level elements (up the BashApp). This was followed by
+working up to higher level elements. This was followed by
 definition of menus and buttons classes, dialogs, and finally by several
 initialization functions. Currently the package structure is:
 
@@ -795,26 +795,24 @@ class INIList(UIList):
     # INI-specific methods ----------------------------------------------------
     @classmethod
     def apply_tweaks(cls, tweak_infos, target_ini=None):
-        tweak_infos_list = list(tweak_infos) # may be a generator
         target_ini_file = target_ini or bosh.iniInfos.ini
         if not cls.ask_create_target_ini(target_ini_file):
             return False
         # Default tweaks are tested, so no need to warn about trust and
         # crashes, etc.
-        tweaks_are_trusted = all(t.is_default_tweak for t in tweak_infos_list)
+        tweaks_are_trusted = all(t.is_default_tweak for t in tweak_infos)
         if (not tweaks_are_trusted and
                 not cls._warn_tweak_game_ini(target_ini_file.abs_path.stail)):
             return False
         needsRefresh = False
-        for ini_info in tweak_infos_list:
+        for ini_info in tweak_infos:
             #--No point applying a tweak that's already applied
             if target_ini: # if target was given calculate the status for it
                 stat = ini_info.getStatus(target_ini_file)
                 ini_info.reset_status() # iniInfos.ini may differ from target
             else: stat = ini_info.tweak_status()
             if stat == 20 or not ini_info.is_applicable(stat): continue
-            needsRefresh |= target_ini_file.applyTweakFile(
-                ini_info.read_ini_content())
+            needsRefresh |= target_ini_file.apply_tweak(ini_info)
         return needsRefresh
 
     @staticmethod
@@ -879,32 +877,31 @@ class INITweakLineCtrl(INIListCtrl):
         # Make sure to freeze/thaw, all the InsertItem calls make the GUI lag
         self.Freeze()
         try:
+            # Clear the list, then populate it with the new lines
+            self.DeleteAllItems()
+            if tweakPath is None:
+                return
             self._RefreshTweakLineCtrl(tweakPath)
         finally:
             self.Thaw()
 
     def _RefreshTweakLineCtrl(self, tweakPath):
-        # Clear the list, then populate it with the new lines
-        self.DeleteAllItems()
-        if tweakPath is None:
-            return
         # TODO(ut) avoid if ini tweak did not change
         self.tweakLines = bosh.iniInfos.get_tweak_lines_infos(tweakPath)
         updated_line_nums = set()
-        for i,line in enumerate(self.tweakLines):
+        for i, (line, _sec, _sett, _val, status, lineNo, is_del) in enumerate(
+                self.tweakLines):
             #--Line
-            self.InsertItem(i, line[0])
+            self.InsertItem(i, line)
             #--Line color
-            status, is_deleted = line[4], line[6]
             if status == -10: color = colors[u'tweak.bkgd.invalid']
             elif status == 10: color = colors[u'tweak.bkgd.mismatched']
             elif status == 20: color = colors[u'tweak.bkgd.matched']
-            elif is_deleted: color = colors[u'tweak.bkgd.mismatched']
+            elif is_del: color = colors['tweak.bkgd.mismatched']
             else: color = Color.from_wx(self.GetBackgroundColour())
             color = color.to_rgba_tuple()
             self.SetItemBackgroundColour(i, color)
             #--Set iniContents color
-            lineNo = line[5]
             if lineNo != -1:
                 self.iniContents.SetItemBackgroundColour(lineNo,color)
                 updated_line_nums.add(lineNo)
@@ -930,28 +927,25 @@ class TargetINILineCtrl(INIListCtrl):
 
     def refresh_ini_contents(self):
         # Make sure to freeze/thaw, all the InsertItem calls make the GUI lag
+        if bosh.iniInfos.ini.isCorrupted: return
         self.Freeze()
         try:
-            self._RefreshIniContents()
+            # Clear the list, then populate it with the new lines
+            self.DeleteAllItems()
+            main_ini_selected = (bush.game.Ini.dropdown_inis[0] ==
+                                 bosh.iniInfos.ini.abs_path.stail)
+            try:
+                sel_ini_lines = bosh.iniInfos.ini.read_ini_content()
+                if main_ini_selected: # If we got here, reading the INI worked
+                    Link.Frame.oblivionIniMissing = False
+                for i, line in enumerate(sel_ini_lines):
+                    self.InsertItem(i, line.rstrip())
+            except OSError:
+                if main_ini_selected:
+                    Link.Frame.oblivionIniMissing = True
+            self.fit_column_to_header(0)
         finally:
             self.Thaw()
-
-    def _RefreshIniContents(self):
-        if bosh.iniInfos.ini.isCorrupted: return
-        # Clear the list, then populate it with the new lines
-        self.DeleteAllItems()
-        main_ini_selected = (bush.game.Ini.dropdown_inis[0] ==
-                             bosh.iniInfos.ini.abs_path.stail)
-        try:
-            sel_ini_lines = bosh.iniInfos.ini.read_ini_content()
-            if main_ini_selected: # If we got here, reading the INI worked
-                Link.Frame.oblivionIniMissing = False
-            for i, line in enumerate(sel_ini_lines):
-                self.InsertItem(i, line.rstrip())
-        except OSError:
-            if main_ini_selected:
-                Link.Frame.oblivionIniMissing = True
-        self.fit_column_to_header(0)
 
 #------------------------------------------------------------------------------
 _common_sort_keys = {'File': None,  # just sort by name
@@ -2133,11 +2127,11 @@ class ModPanel(BashTab):
                 sb_fmt = _('Mods: %(status_num)d/%(total_status_num)d (ESP/M: '
                            '%(status_num_espm)d, ESL: %(status_num_esl)d, '
                            'Overlay: %(status_num_overlay)d)')
-        return sb_fmt %  {'status_num': len(all_mods),
-                          'total_status_num': len(bosh.modInfos),
-                          'status_num_espm': regular_count,
-                          'status_num_esl': esl_count,
-                          'status_num_overlay': overlay_count}
+        return sb_fmt % {'status_num': len(all_mods),
+                         'total_status_num': len(bosh.modInfos),
+                         'status_num_espm': regular_count,
+                         'status_num_esl': esl_count,
+                         'status_num_overlay': overlay_count}
 
     def ClosePanel(self, destroy=False):
         load_order.persist_orders()
@@ -2174,24 +2168,23 @@ class SaveList(UIList):
         if not root:
             showError(self, newName)
             return EventResult.CANCEL # validate_filename would Veto
-        item_edited = [self.panel.detailsPanel.displayed_item]
-        to_select = set()
-        to_del = set()
+        item_edited = self.panel.detailsPanel.displayed_item
+        ren_keys = {}
         for saveInfo in self.get_selected_infos_filtered():
-            if not self.try_rename(saveInfo, root, to_select, to_del,
-                                   item_edited): break
-        if to_select:
-            self.RefreshUI(redraw=to_select, to_del=to_del, # to_add
-                           detail_item=item_edited[0])
+            if (ren := self.try_rename(saveInfo, root)) is None: break
+            ren_keys.update(ren)
+        if ren_keys:
+            rdata = bosh.RefrData.from_renamed(ren_keys)
+            self.RefreshUI(redraw=rdata.redraw, to_del=rdata.to_del,
+                           detail_item=ren_keys.get(item_edited))
             #--Reselect the renamed items
-            self.SelectItemsNoCallback(to_select)
+            self.SelectItemsNoCallback(rdata.redraw)
         return EventResult.CANCEL # needed ! clears new name from label on exception
 
-    def try_rename(self, saveinf, new_root, to_select=None, to_del=None,
-                   item_edited=None, force_ext=''):
+    def try_rename(self, saveinf, new_root, rdata=None, item_edited=None,
+                   force_ext=''):
         newFileName = saveinf.unique_key(new_root, force_ext)
-        return super().try_rename(saveinf, newFileName, to_select, to_del,
-                                  item_edited)
+        return super().try_rename(saveinf, newFileName, rdata, item_edited)
 
     @staticmethod
     def _unhide_wildcard():
@@ -2228,9 +2221,10 @@ class SaveList(UIList):
             return
         do_enable = not sinf.is_save_enabled()
         extension = enabled_ext if do_enable else disabled_ext
-        if rename_res := self.try_rename(sinf, fn_item.fn_body,
-                                         force_ext=extension):
-            self.RefreshUI(redraw=[rename_res], to_del=[fn_item])
+        if ren_keys := self.try_rename(sinf, fn_item.fn_body,
+                                       force_ext=extension):
+            rdata = bosh.RefrData.from_renamed(ren_keys)
+            self.RefreshUI(redraw=rdata.redraw, to_del=rdata.to_del)
 
     # Save profiles
     def set_local_save(self, new_saves, *, do_swap=None):
@@ -2404,7 +2398,6 @@ class SaveDetails(_ModsSavesDetails):
         saveInfo.makeBackup() ##: why backup when just renaming - #292
         prevMTime = saveInfo.ftime
         #--Change Name?
-        to_del = set()
         if changeName:
             newName = FName(self.fileStr.strip()).fn_body
             # if you were wondering: OnFileEdited checked if file existed,
@@ -2412,7 +2405,7 @@ class SaveDetails(_ModsSavesDetails):
             # don't - filesystem APIs might warn user (with a dialog hopefully)
             # for an overwrite, otherwise we can have a race whatever we try
             # here - an extra check can't harm nor makes a (any) difference
-            self.panel_uilist.try_rename(saveInfo, newName, to_del=to_del)
+            ren_keys = self.panel_uilist.try_rename(saveInfo, newName)
         #--Change masters?
         if changeMasters:
             prev_masters = saveInfo.masterNames
@@ -2423,12 +2416,12 @@ class SaveDetails(_ModsSavesDetails):
             saveInfo.setmtime(prevMTime)
             detail_item = self._refresh_detail_info()
         else: detail_item = self.file_info.fn_key
-        kwargs = {u'to_del': to_del, u'detail_item': detail_item}
+        kwargs = {'to_del': set(ren_keys) if changeName else set()}
         if detail_item is None:
-            kwargs[u'to_del'] = to_del | {self.file_info.fn_key}
+            kwargs['to_del'] |= {self.file_info.fn_key} # we failed rewriting
         else:
             kwargs[u'redraw'] = [detail_item]
-        self.panel_uilist.RefreshUI(**kwargs)
+        self.panel_uilist.RefreshUI(**kwargs, detail_item=detail_item)
 
     def RefreshUIColors(self):
         self._update_masters_warning()
@@ -2564,35 +2557,27 @@ class InstallersList(UIList):
         if isinstance(root, tuple):
             root = root[0]
         with BusyCursor():
-            refreshes = [(False, False, False)]
-            newselected = []
+            refreshes = defaultdict(bool) # Store refreshes
+            ren_keys = {}
             try:
                 for package in selected:
-                    if fail := not self.try_rename(package, root, refreshes,
-                                                   newselected):
-                        break
-            finally:
-                refreshNeeded = modsRefresh = iniRefresh = False
-                if len(refreshes) > 1:
-                    refreshNeeded, modsRefresh, iniRefresh = [
-                        any(grouped) for grouped in zip(*refreshes)]
+                    ren_keys.update(self.try_rename(package, root, refreshes))
+            except TypeError:
+                pass # ren_keys.update(None)
             #--Refresh UI
-            if refreshNeeded or fail: # refresh the UI in case of an exception
-                self.RefreshUI(refresh_others=(Store.MODS.IF(modsRefresh) |
-                                               Store.INIS.IF(iniRefresh)))
+            if ren_keys:
+                rdata = bosh.RefrData.from_renamed(ren_keys)
+                self.RefreshUI(redraw=rdata.redraw, to_del=rdata.to_del,
+                               refresh_others=refreshes)
                 #--Reselected the renamed items
-                self.SelectItemsNoCallback(newselected)
+                self.SelectItemsNoCallback(rdata.redraw)
             return EventResult.CANCEL
 
-    def try_rename(self, inst_info, new_root, refreshes, newselected):
+    def try_rename(self, inst_info, new_root, refreshes):
         newFileName = inst_info.unique_key(new_root) # preserve extension for installers
         if newFileName is None: # just changed extension - continue
-            return False, False, False
-        result = self._try_rename(inst_info, newFileName)
-        if result:
-            refreshes.append(result)
-            if result[0]: newselected.append(newFileName)
-            return newFileName # continue
+            return {}, {}
+        return super().try_rename(inst_info, newFileName, refreshes)
 
     @staticmethod
     def _unhide_wildcard():
@@ -3475,28 +3460,27 @@ class ScreensList(UIList):
         digits = len(f'{(num + len(selected) - 1)}')
         numStr = numStr.zfill(digits) if numStr else ''
         with BusyCursor():
-            to_select = set()
-            to_del = set()
-            item_edited = [self.panel.detailsPanel.displayed_item]
+            ren_keys = {}
+            item_edited = self.panel.detailsPanel.displayed_item
             for scrinf in selected:
-                if not self.try_rename(scrinf, root + numStr, to_select,
-                                       to_del, item_edited): break
+                try:
+                    ren_keys.update(self.try_rename(scrinf, root + numStr))
+                except TypeError: break
                 num += 1
                 numStr = str(num).zfill(digits)
-            if to_select:
-                self.RefreshUI(redraw=to_select, to_del=to_del,
-                               detail_item=item_edited[0])
+            if ren_keys:
+                rdata = bosh.RefrData.from_renamed(ren_keys)
+                self.RefreshUI(redraw=rdata.redraw, to_del=rdata.to_del,
+                               detail_item=ren_keys.get(item_edited))
                 #--Reselected the renamed items
-                self.SelectItemsNoCallback(to_select)
+                self.SelectItemsNoCallback(rdata.redraw)
             return EventResult.CANCEL
 
-    def try_rename(self, scrinf, new_root, to_select=None, to_del=None,
-                   item_edited=None):
+    def try_rename(self, scrinf, new_root, store_refr=None):
         newName = FName(new_root + scrinf.fn_key.fn_ext) # TODO: add ScreenInfo.unique_key()
-        if scrinf.get_store().store_dir.join(newName).exists():
+        if scrinf._store().store_dir.join(newName).exists():
             return None # break
-        return super().try_rename(scrinf, newName, to_select, to_del,
-                                  item_edited)
+        return super().try_rename(scrinf, newName, store_refr)
 
     def _handle_key_down(self, wrapped_evt):
         # Enter: Open selected screens
@@ -3554,7 +3538,7 @@ class ScreensPanel(BashTab):
 
     def __init__(self,parent):
         """Initialize."""
-        self.listData = bosh.screen_infos = bosh.ScreenInfos()
+        self.listData = bosh.screen_infos = bosh.ScreenInfos(do_refresh=False)
         super(ScreensPanel, self).__init__(parent)
 
     def ShowPanel(self, **kwargs):
@@ -4251,85 +4235,46 @@ class BashFrame(WindowFrame):
                 newer_version.wb_version > LooseVersion(bass.AppVersion)):
             UpdateNotification.display_dialog(self, newer_version)
 
-#------------------------------------------------------------------------------
-class BashApp(object):
-    """Wrapper around a wx Application."""
-    __slots__ = ('bash_app',)
-
-    def __init__(self, bash_app):
-        self.bash_app = bash_app
-
-    def Init(self): # not OnInit(), we need to initialize _after_ the app has been instantiated
-        """Initialize the application data and create the BashFrame."""
-        #--OnStartup SplashScreen and/or Progress
-        #   Progress gets hidden behind splash by default, since it's not very informative anyway
-        splash_screen = None
-        with balt.Progress(u'Wrye Bash', _(u'Initializing') + u' ' * 10,
-                           elapsed=False) as progress:
-            # Is splash enabled in ini ?
-            if bass.inisettings['EnableSplashScreen']:
-                if (splash := GPath(os.path.join(get_image_dir(),
-                                                 'wryesplash.png'))).is_file():
-                    splash_screen = CenteredSplash(splash.s)
-            #--Init Data
-            progress(0.2, _(u'Initializing Data'))
-            self.InitData(progress)
-            progress(0.7, _(u'Initializing Version'))
-            self.InitVersion()
-            #--MWFrame
-            progress(0.8, _(u'Initializing Windows'))
-            frame = BashFrame() # Link.Frame global set here
-            progress(1.0, _(u'Done'))
-        if splash_screen:
-            splash_screen.stop_splash()
-        self.bash_app.SetTopWindow(frame._native_widget)
-        frame.show_frame()
-        frame.RefreshData(booting=True)
-        frame.is_maximized = settings[u'bash.frameMax']
-        # Moved notebook.Bind() callback here as OnShowPage() is explicitly
-        # called in RefreshData
-        frame.notebook.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED,
-                            frame.notebook.OnShowPage)
-        return frame
-
-    @staticmethod
-    def InitData(progress):
-        """Initialize all data. Called by Init()."""
-        progress(0.2, _(u'Initializing BSAs'))
-        #bsaInfos: used in warnTooManyModsBsas() and modInfos strings detection
-        bosh.bsaInfos = bosh.BSAInfos()
-        bosh.bsaInfos.refresh(booting=True)
-        progress(0.3, _(u'Initializing plugins'))
-        bosh.modInfos = bosh.ModInfos()
-        bosh.modInfos.refresh(booting=True)
-        progress(0.5, _(u'Initializing saves'))
-        bosh.saveInfos = bosh.SaveInfos()
-        bosh.saveInfos.refresh(booting=True)
-        progress(0.6, _(u'Initializing INIs'))
-        bosh.iniInfos = bosh.INIInfos()
-        bosh.iniInfos.refresh(refresh_target=False, booting=True)
-        # screens/installers data are refreshed upon showing the panel
-        #--Patch check
-        if bush.game.Esp.canBash and not bosh.modInfos.bashed_patches and \
-                bass.inisettings['EnsurePatchExists']:
-            progress(0.68, _('Generating Blank Bashed Patch'))
-            try:
-                bosh.modInfos.generateNextBashedPatch(selected_mods=())
-            except: # YAK but this may blow and has blown on whatever coding error, crashing Bash on boot
-                deprint('Failed to create new bashed patch', traceback=True)
-
-    @staticmethod
-    def InitVersion():
-        """Perform any version to version conversion. Called by Init()."""
-        #--Current Version
-        if settings[u'bash.version'] != bass.AppVersion:
-            settings[u'bash.version'] = bass.AppVersion
-            # rescan mergeability on version upgrade to detect new mergeable
-            deprint(u'Version changed, rescanning mergeability')
-            bosh.modInfos.rescanMergeable(bosh.modInfos)
-            deprint(u'Done rescanning mergeability')
-
 # Initialization --------------------------------------------------------------
+def Init(bash_app):
+    """Initialize the application data and create the BashFrame."""
+    #--OnStartup SplashScreen and/or Progress
+    # Progress gets hidden behind splash by default
+    splash = GPath(os.path.join(get_image_dir(), 'wryesplash.png'))
+    show_splash = bass.inisettings['EnableSplashScreen'] and splash.is_file()
+    with CenteredSplash(splash.s, show_splash), balt.Progress(
+            'Wrye Bash', _('Initializing') + ' ' * 10, elapsed=False) as prog:
+        #--Init Data
+        mod_infs = bosh.init_stores(prog)
+        #--Patch check
+        if bush.game.Esp.canBash and not mod_infs.bashed_patches and \
+                bass.inisettings['EnsurePatchExists']:
+            prog(0.68, _('Generating Blank Bashed Patch'))
+            try: # this may blow and has blown on random coding errors ...
+                mod_infs.generateNextBashedPatch(selected_mods=())
+            except: # ... crashing Bash on boot, hence the catch-all here
+                 deprint('Failed to create new bashed patch', traceback=True)
+        prog(0.7, _('Initializing Version'))
+        if settings['bash.version'] != bass.AppVersion:
+            settings['bash.version'] = bass.AppVersion
+            # rescan mergeability on version upgrade to detect new mergeable
+            deprint('Version changed, rescanning mergeability')
+            mod_infs.rescanMergeable(mod_infs)
+            deprint('Done rescanning mergeability')
+        #--MWFrame
+        prog(0.8, _('Initializing Windows'))
+        frame = BashFrame() # Link.Frame global set here
+        prog(1.0, _('Done'))
+    bash_app.SetTopWindow(frame._native_widget)
+    frame.show_frame()
+    frame.RefreshData(booting=True)
+    frame.is_maximized = settings['bash.frameMax']
+    # Moved notebook.Bind() callback here as OnShowPage() is explicitly
+    # called in RefreshData
+    frame.notebook.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED,
+                        frame.notebook.OnShowPage)
+    return frame
+
 def InitSettings(): # this must run first !
     """Initializes settings dictionary for bosh and basher."""
     bosh.initSettings(askYes)

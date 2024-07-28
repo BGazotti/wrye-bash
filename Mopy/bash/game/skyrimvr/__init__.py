@@ -25,6 +25,7 @@ from .. import MergeabilityCheck, ObjectIndexRange
 from ..skyrimse import ASkyrimSEGameInfo
 from ..store_mixins import SteamMixin
 from ... import bass
+from ...bolt import FName, classproperty
 
 class _ASkyrimVRGameInfo(ASkyrimSEGameInfo):
     display_name = 'Skyrim VR'
@@ -55,8 +56,12 @@ class _ASkyrimVRGameInfo(ASkyrimSEGameInfo):
     class Ini(ASkyrimSEGameInfo.Ini):
         default_ini_file = u'Skyrim.ini' # yes, that's the default one
         dropdown_inis = [u'SkyrimVR.ini', u'SkyrimPrefs.ini']
-        resource_override_key = u'sVrResourceArchiveList'
-        resource_override_defaults = [u'Skyrim_VR - Main.bsa']
+        start_dex_keys = {**ASkyrimSEGameInfo.Ini.start_dex_keys,
+            # SkyrimVR has INI settings that override all other BSAs, make sure
+            # they come last
+            ASkyrimSEGameInfo.Ini.BSA_MAX: ('sVrResourceArchiveList',)}
+        # fallback BSA if the sVrResourceArchiveList key does not load any BSAs
+        engine_overrides = ['Skyrim_VR - Main.bsa']
 
     class Xe(ASkyrimSEGameInfo.Xe):
         full_name = u'TES5VREdit'
@@ -77,6 +82,22 @@ class _ASkyrimVRGameInfo(ASkyrimSEGameInfo):
         'skyrimvr.esm',
         'skyrim_vr - main.bsa',
     }
+
+    class _LoSkyrimVR(ASkyrimSEGameInfo.LoSkyrimSE):
+        must_be_active_if_present = (
+            *ASkyrimSEGameInfo.LoSkyrimSE.must_be_active_if_present,
+            FName('SkyrimVR.esm'))
+        ##: This is nasty, figure out a way to get rid of it
+        @classproperty
+        def max_espms(cls):
+            from ... import bush
+            return 253 if bush.game.has_esl else 255
+
+        @classproperty
+        def max_esls(cls):
+            from ... import bush
+            return 4096 if bush.game.has_esl else 0
+    lo_handler = _LoSkyrimVR
 
     @classmethod
     def init(cls, _package_name=None):

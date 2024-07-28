@@ -26,6 +26,7 @@ from .. import WS_COMMON_FILES, GameInfo
 from ..patch_game import PatchGame
 from ..store_mixins import DiscMixin, GOGMixin, SteamMixin, WindowsStoreMixin
 from ... import bolt
+from ..._games_lo import INIGame, TimestampGame
 
 _GOG_IDS = [
     1435828767, # Game
@@ -79,6 +80,23 @@ class _AMorrowindGameInfo(PatchGame):
         screenshot_index_key = (u'General', u'Screen Shot Index', u'0')
         supports_mod_inis = False
 
+        @classmethod
+        def get_bsas_from_inis(cls, av_bsas, *ini_files_cached):
+            """Get bsas loaded from the [Archives] section of Morrowind.ini.
+            The keys follow the format Archive X (note the space) where X is a
+            number used to make the keys unique. Load order is set by ftime. We
+            do not edit av_bsas - cf _AMorrowindGameInfo.Bsa.update_bsa_lo."""
+            mor_ini = ini_files_cached[0] # no plugin inis
+            ci_section = mor_ini.get_setting_values('Archives', {})
+            # keep only the (CIstr) keys that match the format Archive X
+            bsas = {bolt.FName(v): av_bsas.get(v) #ci_section values are tuples
+                    for ci_key, (v, j) in ci_section.items() if
+                    ci_key[:8].lower() == 'archive ' and ci_key[8:].isdigit()}
+            if len(bsas) != len(bsalo := {v: k for k, v in bsas.items() if v}):
+                bolt.deprint(f'some BSAs in {mor_ini} are not present: '
+                             f'{bsas.keys() - bsalo.values()}')
+            return bsalo, dict.fromkeys(bsalo, mor_ini.fn_key)
+
     class Bsa(GameInfo.Bsa):
         allow_reset_timestamps = True
         redate_dict = bolt.DefaultFNDict(lambda: 1054674000, { # '2003-06-04'
@@ -86,6 +104,20 @@ class _AMorrowindGameInfo(PatchGame):
             'Tribunal.bsa': 1036533600,  # '2002-11-06'
             'Bloodmoon.bsa': 1054587600, # '2003-06-03'
         })
+
+        @classmethod
+        def attached_bsas(cls, bsa_infos, fn_body):
+            """Morrowind does not load attached BSAs at all - they all have
+            to be registered via the INI."""
+            return []
+
+        @classmethod
+        def update_bsa_lo(cls, lo, _av_bsas, bsa_lodex, cause):
+            """Sort Ini loaded bsas by mtime then by name - av_bsas unused."""
+            binfs_sorted = sorted([bi for bi in bsa_lodex],
+                                  key=lambda x: (x.ftime, x.fn_key))
+            # override the FName values with the int load order
+            bsa_lodex.update((bi, i) for i, bi in enumerate(binfs_sorted))
 
     class Xe(GameInfo.Xe):
         full_name = u'TES3Edit'
@@ -136,6 +168,12 @@ class _AMorrowindGameInfo(PatchGame):
         b'BOOK', b'ALCH', b'LEVI', b'LEVC', b'CELL', b'LAND', b'PGRD', b'SNDG',
         b'DIAL', b'INFO',
     ]
+
+    class _LoMorrowind(INIGame, TimestampGame):
+        """Morrowind uses timestamps for specifying load order, but stores
+        active plugins in Morrowind.ini."""
+        ini_key_actives = ('Morrowind.ini', 'Game Files', 'GameFile%(lo_idx)s')
+    lo_handler = _LoMorrowind
 
     @classmethod
     def init(cls, _package_name=None):

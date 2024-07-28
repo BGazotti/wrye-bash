@@ -25,6 +25,8 @@ state and methods. game.GameInfo#init classmethod is used to import rest of
 active game package as needed (currently the record and constants modules)
 and to set some brec.RecordHeader/MreRecord class variables."""
 import importlib
+import re
+import sys
 from enum import Enum
 from itertools import chain
 from os.path import join as _j
@@ -377,19 +379,47 @@ class GameInfo(object):
         # INI setting used to set screenshot index
         #  (section, key, default value)
         screenshot_index_key = (u'Display', u'iScreenShotIndex', u'0')
-        # The INI entries listing vanilla BSAs to load
-        resource_archives_keys = ()
-        # An INI key listing BSAs that will override all plugin BSAs. Blank if
-        # it doesn't exist for this game
-        resource_override_key = u''
-        # The default value for resource_override_key if it's missing from the
-        # game INI
-        resource_override_defaults = []
+        # The INI entries listing vanilla BSAs to load - those are loaded first
+        # so make sure they come first by assigning negative indexes
+        BSA_MIN, BSA_MAX = -sys.maxsize + 1, sys.maxsize
+        start_dex_keys = {}
+        engine_overrides = [] # SkyrimVR only - see there
         # Whether this game supports mod ini files aka ini fragments
         supports_mod_inis = True
 
+        @classmethod
+        def get_bsas_from_inis(cls, av_bsas, *ini_files_cached):
+            """Get the load order of INI-loaded BSAs - in the vicinity of
+            ±sys.maxsize. These BSAs are removed from av_bsas dict."""
+            bsa_lo = {}
+            bsa_cause = {}  # Reason each BSA was loaded
+            for group_dex, (ini_idx, keys) in enumerate(
+                    cls.start_dex_keys.items()):
+                bsas_cause = []
+                for ini_k in keys:
+                    for ini_f in ini_files_cached: # higher loading first
+                        if bsas := ini_f.getSetting('Archive', ini_k, ''):
+                            bsas = (x.strip() for x in bsas.split(','))
+                            bsas_cause.append(([av_bsas[b] for b in bsas
+                                                if b in av_bsas],
+                                f'{ini_f.abs_path.stail} ({ini_k})'))
+                            break # The first INI with the key wins ##: Test this
+                if not bsas_cause and group_dex == 1:
+                    # fallback to the defaults set by the engine - must exist!
+                    bsas_cause = [([av_bsas[b] for b in cls.engine_overrides],
+                                   f'{cls.dropdown_inis[0]} ({keys[0]})')]
+                for res_ov_bsas, res_ov_cause in bsas_cause:
+                    for binf in res_ov_bsas:
+                        bsa_lo[binf] = ini_idx
+                        bsa_cause[binf] = res_ov_cause
+                        # note the last entries load higher if ini_idx < 0 else
+                        # lower (games with BSA_MAX keys if len(res_ov_bsas)>1)
+                        ini_idx -= -1 if ini_idx < 0 else 1
+                        del av_bsas[binf.fn_key]
+            return bsa_lo, bsa_cause
+
     class Ess(object):
-        """Information about WB's capabilities with regards to save file
+        """Information about WB's capabilities regarding save file
         viewing and editing for this game."""
         # Can read the info needed for the Save Tab display
         canReadBasic = True
@@ -428,6 +458,39 @@ class GameInfo(object):
         # game does not use BSA versions and so BSA version checks will be
         # skipped entirely.
         valid_versions = set()
+
+        _str_heuristics = tuple(enumerate(('main', 'interface')))
+        @classmethod
+        def heuristic_sort_key(cls, master_bsa_inf, ini_loaded):
+            """Heuristics key to order ini-loaded bsas which might contain
+            localized string files. Sort 'main', 'patch' and 'interface' to
+            the front then follow the INI load order placing higher loading
+            bsas first. Avoids parsing expensive BSAs for the game master
+            strings (e.g. Skyrim.esm -> Skyrim - Textures0.bsa)."""
+            bsa_body_lo = master_bsa_inf.fn_key.fn_body.lower()
+            ini_lo = -ini_loaded[master_bsa_inf] # sort higher loading first
+            for i, h in cls._str_heuristics:
+                if h in bsa_body_lo:
+                    return i, ini_lo
+            return len(cls._str_heuristics), ini_lo
+
+        @classmethod
+        def attached_bsas(cls, bsa_infos, plugin_fn):
+            """Return a list of all BSAs that the game will attach to
+            plugin_fn."""
+            bsa_pattern = (re.escape(plugin_fn.fn_body) +
+                           f'{cls.attachment_regex}\\{cls.bsa_extension}')
+            is_attached = re.compile(bsa_pattern, re.I).match
+            return [binf for k, binf in bsa_infos.items() if is_attached(k)]
+
+        @classmethod
+        def update_bsa_lo(cls, lo, av_bsas, bsa_lodex, cause):
+            # BSAs loaded based on plugin name load in the middle of the pack
+            for i, p in enumerate(lo):
+                for binf in cls.attached_bsas(av_bsas, p):
+                    bsa_lodex[binf] = i
+                    cause[binf] = p
+                    del av_bsas[binf.fn_key]
 
     class Psc(object):
         """Information about script sources (only Papyrus right now) for this

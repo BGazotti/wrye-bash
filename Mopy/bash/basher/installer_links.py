@@ -303,12 +303,11 @@ class Installer_Wizard(_Installer_AWizardLink):
     """Runs the install wizard to select sub-packages and filter plugins."""
     def __init__(self, *, auto_wizard):
         super(Installer_Wizard, self).__init__()
-        self.bAuto = auto_wizard
-        self._text = (_('Auto Wizard…') if self.bAuto else
-                      _('Manual Wizard…'))
+        self._auto = auto_wizard
+        self._text = (_('Auto Wizard…') if self._auto else _('Manual Wizard…'))
         self._help = (
             _(u'Run the install wizard, selecting the default options.')
-            if self.bAuto else _(u'Run the install wizard.'))
+            if self._auto else _(u'Run the install wizard.'))
 
     def _enable(self):
         return super(Installer_Wizard, self)._enable() and all(
@@ -338,7 +337,7 @@ class Installer_Wizard(_Installer_AWizardLink):
                         else:
                             progress = None
                         wizard = InstallerWizard(self.window, sel_package,
-                                                 self.bAuto, progress)
+                                                 self._auto, progress)
                     except CancelError:
                         return
                     wizard.ensureDisplayed()
@@ -391,7 +390,7 @@ class Installer_Wizard(_Installer_AWizardLink):
             with outFile.open(u'w', encoding=u'utf-8') as out:
                 out.write(u'\n'.join(generateTweakLines(wizardEdits, iniFile)))
                 out.write(u'\n')
-            bosh.iniInfos.new_info(outFile.stail, owner=installer.fn_key)
+            inf = bosh.iniInfos.new_info(outFile.stail, owner=installer.fn_key)
             # trigger refresh UI
             ui_refresh |= Store.INIS.DO()
             # We wont automatically apply tweaks to anything other than
@@ -412,8 +411,7 @@ class Installer_Wizard(_Installer_AWizardLink):
                     manuallyApply.append((outFile.stail, iniFile))
                     continue
                 target_ini_file = bosh.BestIniFile(target_path)
-            if INIList.apply_tweaks((bosh.iniInfos[outFile.stail],),
-                                    target_ini_file):
+            if INIList.apply_tweaks([inf], target_ini_file):
                 lastApplied = FName(outFile.stail)
         #--Refresh after all the tweaks are applied
         if lastApplied is not None:
@@ -490,7 +488,7 @@ class Installer_Duplicate(_SingleInstallable):
         if not result: return
         #--Duplicate
         with BusyCursor():
-            self.idata.copy_installer(self._selected_info, result)
+            self._selected_info.copy_to(result)
         self.window.RefreshUI(detail_item=result)
 
 class Installer_Hide(_InstallerLink, UIList_Hide):

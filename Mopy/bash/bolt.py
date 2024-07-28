@@ -394,10 +394,10 @@ def reverse_dict_multi(source_dict: dict[K, V]) -> dict[V, set[K]]:
     """Create a dict that represents the reverse/inverse mapping of the
     specified dict, with support for duplicate values in the source dict. See
     also reverse_dict for simple 1-to-1 mappings."""
-    ret = {}
+    di = {}
     for k, v in source_dict.items():
-        ret.setdefault(v, set()).add(k)
-    return ret
+        di.setdefault(v, set()).add(k)
+    return di
 
 def flatten_multikey_dict(multikey_dict: dict[K | tuple[K, ...], V]) \
         -> dict[K, V]:
@@ -1246,8 +1246,6 @@ class Path(os.PathLike):
     def copyTo(self, dest_path, set_time=None):
         """Copy self to dest_path make dirs if necessary and preserve ftime."""
         dest_path = GPath(dest_path)
-        if self.is_dir():
-            raise exception.StateError(f'{self._s} is a directory.')
         try:
             copy_or_reflink(self._s, dest_path._s)
             dest_path.mtime = set_time or self.mtime
@@ -1713,11 +1711,6 @@ class AFile(object):
             return True
         return False
 
-    def needs_update(self):
-        """Returns True if this file changed. Throws an OSError if it is
-        deleted. Avoid all but simple uses - use do_update instead."""
-        return self._file_changed(self._stat_tuple())
-
     def _file_changed(self, stat_tuple):
         return (self.fsize, self.ftime) != stat_tuple
 
@@ -1729,12 +1722,19 @@ class AFile(object):
         """
         self.fsize, self.ftime = stat_tuple
 
+    def fs_copy(self, dup_path: Path, *, set_time=None):
+        """Duplicate file to dup_path. If set_time is None, we set the mtime
+        of the duplicate path to ftime. This should really be a
+        _mark_not_changed internal API (what about ctime?)."""
+        self.abs_path.copyTo(dup_path, set_time=set_time or self.ftime)
+
     def __repr__(self):
         return f'{self.__class__.__name__}<{self.abs_path.stail}>'
 
 #------------------------------------------------------------------------------
 class ListInfo:
-    """Info object displayed in Wrye Bash list."""
+    """Info object displayed in Wrye Bash list - comes last in MI (*above*
+    Afile)."""
     __slots__ = ('fn_key', )
     _valid_exts_re = ''
     _is_filename = True
@@ -1803,7 +1803,7 @@ class ListInfo:
     def unique_name(cls, name_str, check_exists=False):
         base_name = name_str
         unique_counter = 0
-        store = cls.get_store()
+        store = cls._store()
         while (store.store_dir.join(name_str).exists() if check_exists else
                name_str in store): # must wrap a FNDict
             unique_counter += 1
@@ -1829,8 +1829,20 @@ class ListInfo:
         return 0, len(text_str) # if selection not at start reset
 
     @classmethod
-    def get_store(cls):
-        raise NotImplementedError(f'{type(cls)} does not provide a data store')
+    def _store(cls):
+        raise NotImplementedError(f'{cls} does not provide a data store')
+
+    # Instance methods --------------------------------------------------------
+    def copy_to(self, dup_path: Path, *, set_time=None, **kwargs):
+        """Copies self to dup_path. Will overwrite! Will add the new file to
+        the data_store if copied inside the store_dir but the client is
+        responsible for calling the final refresh of the data store."""
+        self.fs_copy(dup_path, set_time=set_time)
+        if dup_path.head == self._store().store_dir:
+            self._store().add_info(self, dup_path.stail, **kwargs)
+
+    def fs_copy(self, dup_path, *, set_time=None):
+        raise NotImplementedError
 
     def __str__(self):
         """Alias for self.fn_key."""
@@ -1858,7 +1870,7 @@ class AFileInfo(AFile, ListInfo):
     def get_rename_paths(self, newName):
         """Return possible paths this file's renaming might affect (possibly
         omitting some that do not exist)."""
-        return [(self.abs_path, self.get_store().store_dir.join(newName))]
+        return [(self.abs_path, self._store().store_dir.join(newName))]
 
     def validate_name(self, name_str, check_store=True):
         super_validate = super().validate_name(name_str,
@@ -1872,6 +1884,9 @@ class AFileInfo(AFile, ListInfo):
     @property
     def info_dir(self):
         return self.abs_path.head
+
+    def __repr__(self): # bypass AFInfo - abs path is not always set
+        return super(AFile, self).__repr__()
 
 #------------------------------------------------------------------------------
 class PickleDict(object):
@@ -1947,7 +1962,7 @@ class PickleDict(object):
                 if resave:
                     # Make a permanent backup copy of the VDATA2 version before
                     # saving over it
-                    path.copyTo(path.root + u'-vdata2.dat.bak')
+                    path.copyTo(path.root + '-vdata2.dat.bak') # Path.__add__!
                     self.save()
                 return 1 + (path == self.backup)
             except (OSError, EOFError, ValueError,

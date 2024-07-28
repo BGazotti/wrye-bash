@@ -226,23 +226,22 @@ class ModFile(object):
     def __load_strs(self, ins, loadStrings, progress):
         # Check if we need to handle strings
         self.strings.clear()
-        if loadStrings and getattr(self.tes4.flags1, 'localized', False):
-            stringsProgress = SubProgress(# Use 10% of progress bar for strings
-                progress, 0, 0.1)
-            from . import bosh
-            i_lang = bosh.oblivionIni.get_ini_language(
-                bush.game.Ini.default_game_lang)
-            stringsPaths = self.fileInfo.getStringsPaths(i_lang)
-            if stringsPaths: stringsProgress.setFull(len(stringsPaths))
-            for i, path in enumerate(stringsPaths):
-                self.strings.loadFile(
-                    path, SubProgress(stringsProgress, i, i + 1), i_lang)
-                stringsProgress(i)
-            ins.setStringTable(self.strings)
-            subProgress = SubProgress(progress, 0.1, 1.0)
-        else:
+        if not (loadStrings and getattr(self.tes4.flags1, 'localized', False)):
             ins.setStringTable(None)
-            subProgress = progress
+            return progress
+        stringsProgress = SubProgress( # Use 10% of progress bar for strings
+            progress, 0, 0.1)
+        from . import bosh
+        i_lang = bosh.oblivionIni.get_ini_language(
+            bush.game.Ini.default_game_lang)
+        stringsPaths = self.fileInfo.getStringsPaths(i_lang)
+        if stringsPaths: stringsProgress.setFull(len(stringsPaths))
+        for i, path in enumerate(stringsPaths):
+            self.strings.loadFile(path, SubProgress(stringsProgress, i, i + 1),
+                                  i_lang)
+            stringsProgress(i)
+        ins.setStringTable(self.strings)
+        subProgress = SubProgress(progress, 0.1, 1.0)
         return subProgress
 
     def safeSave(self):
@@ -304,14 +303,14 @@ class ModFile(object):
     def used_masters_by_top(self) -> dict[bytes, set[FName]]:
         """Get a dict mapping top group signatures to sets that indicate what
         masters those top groups depend on."""
-        ret = {}
+        sig_mas = {}
         for block_sig, block in self.tops.items():
             masters_set = MasterSet([bush.game.master_file])
             block.updateMasters(masters_set.add)
             # The file itself is always implicitly available, so discard it
             masters_set.discard(self.fileInfo.fn_key)
-            ret[block_sig] = set(masters_set) ##: drop once MasterSet is gone
-        return ret
+            sig_mas[block_sig] = set(masters_set) ##: drop once MasterSet is gone
+        return sig_mas
 
     def count_new_records(self, next_object_start=None):
         """Count the number of new records in this file. self.tes4.masters must
