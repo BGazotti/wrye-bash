@@ -170,69 +170,7 @@ class _IcoFromRaw(GuiImage):
         if self._is_created(): return self._cached_widget
         self._cached_args = self._img_data, self._img_path, self._img_type, self.iconSize, \
             self.iconSize
-        class IcoFile:
-            def __init__(self, buf):
-                s = buf.read(6)
-                if s[:4] != b"\0\0\1\0":
-                    msg = "not an ICO file"
-                    raise SyntaxError(msg)
-
-                self.buf=buf
-                self.entry=[]
-                # Number of items in file
-
-                self.nb_items = unpack_from("<H", s, 4)[0]
-
-                # Get headers for each item
-                for i in range(self.nb_items):
-                    s = buf.read(16)
-
-                    icon_header = {
-                        "width": s[0],
-                        "height": s[1],
-                        "nb_color": s[2],
-                        # No. of colors in image (0 if >=8bpp)
-                        "reserved": s[3],
-                        "planes": unpack_from("<H", s, 4)[0],
-                        "bpp": unpack_from("<H", s, 6)[0],
-                        "size": unpack_from("<H", s, 8)[0],
-                        "offset": unpack_from("<H", s, 12)[0],
-                    }
-
-                    # See Wikipedia
-                    for j in ("width", "height"):
-                        if not icon_header[j]:
-                            icon_header[j] = 256
-
-                    # See Wikipedia notes about color depth.
-                    # We need this just to differ images with equal sizes
-                    icon_header["color_depth"] = (
-                            icon_header["bpp"]
-                            or (
-                                    icon_header["nb_color"] != 0
-                                    and ceil(log(icon_header["nb_color"], 2))
-                            )
-                            or 256
-                    )
-
-                    icon_header["dim"] = (
-                    icon_header["width"], icon_header["height"])
-                    icon_header["square"] = icon_header["width"] * icon_header[
-                        "height"]
-
-                    self.entry.append(icon_header)
-
-                self.entry = sorted(self.entry, key=lambda x: x["color_depth"])
-                # ICO images are usually squares
-                self.entry = sorted(self.entry, key=lambda x: x["square"],
-                    reverse=True)
-
-        pog = IcoFile(BytesIO(self._img_data))
-        img = _wx.Bitmap(pog.buf.read() ,pog.entry[0]['width'],pog.entry[0][
-                    'height'])
-        img = _wx.Image(BytesIO(self._img_data),BITMAP_TYPE_ICO)
-        img.Scale(16,16)
-        return _wx.Bitmap(img)
+        return _wx.Bitmap(_wx.Image(BytesIO(self._img_data),BITMAP_TYPE_ICO))
 
 class Ico2Bitmap:
     @classmethod
@@ -252,162 +190,6 @@ class Ico2Bitmap:
         return width, height, ico_data, has_alpha,
 
 
-
-        # Number of items in file
-        # Get headers for each item
-        for i in range(unpack_from("<H", s, 4)[0]):
-            s = buf.read(16)
-
-            icon_header = {
-                "width": s[0],
-                "height": s[1],
-                "nb_color": s[2],
-                # No. of colors in image (0 if >=8bpp)
-                "reserved": s[3],
-                "planes": unpack_from("<H", s, 4)[0],
-                "bpp": unpack_from("<H", s, 6)[0],
-                "size": unpack_from("<H", s, 8)[0],
-                "offset": unpack_from("<H", s, 12)[0],
-            }
-
-            # See Wikipedia
-            for j in ("width", "height"):
-                if not icon_header[j]:
-                    icon_header[j] = 256
-
-            # See Wikipedia notes about color depth.
-            # We need this just to differ images with equal sizes
-            icon_header["color_depth"] = (
-                    icon_header["bpp"]
-                    or (
-                            icon_header["nb_color"] != 0
-                            and ceil(log(icon_header["nb_color"], 2))
-                    )
-                    or 256
-            )
-
-            icon_header["dim"] = (
-                icon_header["width"], icon_header["height"])
-            icon_header["square"] = icon_header["width"] * icon_header[
-                "height"]
-
-            self.entry.append(icon_header)
-
-        self.entry = sorted(self.entry, key=lambda x: x["color_depth"])
-        # ICO images are usually squares
-        self.entry = sorted(self.entry, key=lambda x: x["square"],
-            reverse=True)
-
-class IcoFile:
-    def __init__(self, buf):
-        """
-        Parse image from file-like object containing ico file data
-        """
-
-        # check magic
-
-
-
-
-    def megaparsemapam(self) -> (bytes, int, int):
-        return self.buf, self.entry[0]['width'], self.entry[0]['height']
-    def sizes(self):
-        """
-        Get a list of all available icon sizes and color depths.
-        """
-        return {(h["width"], h["height"]) for h in self.entry}
-
-    def getentryindex(self, size, bpp=False):
-        for i, h in enumerate(self.entry):
-            if size == h["dim"] and (bpp is False or bpp == h["color_depth"]):
-                return i
-        return 0
-
-    def getimage(self, size, bpp=False):
-        """
-        Get an image from the icon
-        """
-        return self.frame(self.getentryindex(size, bpp))
-
-    def frame(self, idx):
-        """
-        Get an image from frame idx
-        """
-
-        header = self.entry[idx]
-
-        self.buf.seek(header["offset"])
-        data = self.buf.read(8)
-        self.buf.seek(header["offset"])
-
-        if data[:8] == PngImagePlugin._MAGIC:
-            # png frame
-            im = PngImagePlugin.PngImageFile(self.buf)
-            Image._decompression_bomb_check(im.size)
-        else:
-            # XOR + AND mask bmp frame
-            im = BmpImagePlugin.DibImageFile(self.buf)
-            Image._decompression_bomb_check(im.size)
-
-            # change tile dimension to only encompass XOR image
-            im._size = (im.size[0], int(im.size[1] / 2))
-            d, e, o, a = im.tile[0]
-            im.tile[0] = d, (0, 0) + im.size, o, a
-
-            # figure out where AND mask image starts
-            bpp = header["bpp"]
-            if 32 == bpp:
-                # 32-bit color depth icon image allows semitransparent areas
-                # PIL's DIB format ignores transparency bits, recover them.
-                # The DIB is packed in BGRX byte order where X is the alpha
-                # channel.
-
-                # Back up to start of bmp data
-                self.buf.seek(o)
-                # extract every 4th byte (eg. 3,7,11,15,...)
-                alpha_bytes = self.buf.read(im.size[0] * im.size[1] * 4)[3::4]
-
-                # convert to an 8bpp grayscale image
-                mask = Image.frombuffer(
-                    "L",  # 8bpp
-                    im.size,  # (w, h)
-                    alpha_bytes,  # source chars
-                    "raw",  # raw decoder
-                    ("L", 0, -1),  # 8bpp inverted, unpadded, reversed
-                )
-            else:
-                # get AND image from end of bitmap
-                w = im.size[0]
-                if (w % 32) > 0:
-                    # bitmap row data is aligned to word boundaries
-                    w += 32 - (im.size[0] % 32)
-
-                # the total mask data is
-                # padded row size * height / bits per char
-
-                total_bytes = int((w * im.size[1]) / 8)
-                and_mask_offset = header["offset"] + header["size"] - total_bytes
-
-                self.buf.seek(and_mask_offset)
-                mask_data = self.buf.read(total_bytes)
-
-                # convert raw data to image
-                mask = Image.frombuffer(
-                    "1",  # 1 bpp
-                    im.size,  # (w, h)
-                    mask_data,  # source chars
-                    "raw",  # raw decoder
-                    ("1;I", int(w / 8), -1),  # 1bpp inverted, padded, reversed
-                )
-
-                # now we have two images, im is XOR image and mask is AND image
-
-            # apply mask image as alpha channel
-            im = im.convert("RGBA")
-            im.putalpha(mask)
-
-        return im
-
 class _BmpFromIcoPath(GuiImage):
     _native_widget: _wx.Bitmap
 
@@ -422,9 +204,9 @@ class _BmpFromIcoPath(GuiImage):
         # Hack - when user scales windows display icon may need scaling
         if (self.iconSize != -1 and w != self.iconSize or
             h != self.iconSize): # rescale !
-            scaled = native.ConvertToImage().Scale(self.iconSize,
+            scaled_self = native.ConvertToImage().Scale(self.iconSize,
                 self.iconSize, _wx.IMAGE_QUALITY_HIGH)
-            self._cached_args = scaled,
+            self._cached_args = scaled_self,
             return super()._native_widget
         return native
 

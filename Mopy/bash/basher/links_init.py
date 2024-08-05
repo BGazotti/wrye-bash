@@ -23,6 +23,7 @@
 """Links initialization functions. Each panel's UIList has main and items Links
 attributes which are populated here. Therefore the layout of the menus is
 also defined in these functions."""
+import concurrent.futures
 import multiprocessing
 import os
 import shlex
@@ -144,28 +145,20 @@ def InitStatusBar():
         'ShowAudioToolLaunchers']) for at in audio_tools.items())
     all_links.extend(_tool_args(*mt) for mt in misc_tools.items())
 
-    # TODO native win32 handling for this
-    # should be very straightforward by requesting resources
-    # TODO switch to concurrent.futures.ThreadPoolExecutor? more elegant
-    local_PE_threads = list()
     local_lock = threading.Lock()
-    def create_launcher_button(lpath: str, lname, largs):  # TODO get this out of here
+
+    #FIXME get this method in a more suitable place?
+    def _create_launcher_button(lpath: str, lname, largs):
 
         icons = (get_image('error_cross.16'),) * 3
         try:
+            # TODO native win32 handling for this
+            # should be straightforward by requesting resources from the PE file
             if icon_data := ExtractIcon(lpath).get_raw_windows_preferred_icon():
                 icons = []
-                #proto_img = Ico2Bitmap.conv(icon_data)
-                #bmp = wx.Image(*proto_img)
-                #bmp = wx.Bitmap(proto_img[2],proto_img[0],proto_img[1])
-                #bmp = wx.Image()
+                gui_image_defsize = _IcoFromRaw(None, img_data=icon_data)
                 for value in (16, 24, 32):
-                    # TODO get different sized objects
-                    poguinho = _IcoFromRaw(None, img_data=icon_data)
-                    icons.append(poguinho)
-                    #rsz=bmp.rescaled(value,value)
-                    #icons.append(bmp)
-                    #icons.append(wx.Bitmap(wx.Image(value, value, icon_data)))
+                    icons.append(gui_image_defsize.rescaled(value, value))
         except pefile.PEFormatError:
             pass  # no icon in this file, or not an exe
         # FIXME use AppButtonFactory? Maybe?
@@ -176,14 +169,13 @@ def InitStatusBar():
         all_links.append(btn)
         local_lock.release()
 
-    for launcher_name in bass.settings['bash.launchers']:
-        launcher_path, launcher_args = bass.settings['bash.launchers'][launcher_name]
-        local_PE_threads.append((lthread := threading.Thread(target=create_launcher_button,
-            args=(launcher_path, launcher_name, shlex.split(launcher_args)))))
-        lthread.start()
+    with concurrent.futures.ThreadPoolExecutor() as work_dispatcher:
+        for launcher_name in bass.settings['bash.launchers']:
+            launcher_path, launcher_args = bass.settings['bash.launchers'][launcher_name]
+            work_dispatcher.submit(_create_launcher_button, launcher_path, launcher_name,
+                shlex.split(launcher_args))
+        work_dispatcher.shutdown(wait=True)
 
-    for lthread in local_PE_threads:
-        lthread.join()
     #--Final couple
     all_links.append(DocBrowserButton('DocBrowser'))
     all_links.append(PluginCheckerButton('ModChecker'))
