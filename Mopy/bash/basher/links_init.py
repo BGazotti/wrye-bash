@@ -23,14 +23,10 @@
 """Links initialization functions. Each panel's UIList has main and items Links
 attributes which are populated here. Therefore the layout of the menus is
 also defined in these functions."""
-import concurrent.futures
-import multiprocessing
 import os
 import shlex
-import threading
 
-import pefile
-import wx
+from pefile import PEFormatError
 
 from . import BSAList, INIList, InstallersList, \
     InstallersPanel, MasterList, ModList, SaveList, ScreensList
@@ -145,36 +141,25 @@ def InitStatusBar():
         'ShowAudioToolLaunchers']) for at in audio_tools.items())
     all_links.extend(_tool_args(*mt) for mt in misc_tools.items())
 
-    local_lock = threading.Lock()
-
-    #FIXME get this method in a more suitable place?
-    def _create_launcher_button(lpath: str, lname, largs):
-
+    for launcher_name in bass.settings['bash.launchers']:
+        launcher_path, launcher_args = bass.settings['bash.launchers'][launcher_name]
         icons = (get_image('error_cross.16'),) * 3
         try:
             # TODO native win32 handling for this
             # should be straightforward by requesting resources from the PE file
-            if icon_data := ExtractIcon(lpath).get_raw_windows_preferred_icon():
+            if icon_data := ExtractIcon(
+                    launcher_path).get_raw_windows_preferred_icon():
                 icons = []
                 gui_image_defsize = _IcoFromRaw(None, img_data=icon_data)
                 for value in (16, 24, 32):
                     icons.append(gui_image_defsize.rescaled(value, value))
-        except pefile.PEFormatError:
+        except PEFormatError:
             pass  # no icon in this file, or not an exe
         # FIXME use AppButtonFactory? Maybe?
-        btn = AppButton(GPath_no_norm(lpath), icons,
-                        lname, lname,  # TODO custom tooltip
-                        cli_args=largs, canHide=False)
-        local_lock.acquire()
+        btn = AppButton(GPath_no_norm(launcher_path), icons,
+            launcher_name, launcher_name,  # TODO custom tooltip, hiding
+            cli_args=launcher_args, canHide=False)
         all_links.append(btn)
-        local_lock.release()
-
-    with concurrent.futures.ThreadPoolExecutor() as work_dispatcher:
-        for launcher_name in bass.settings['bash.launchers']:
-            launcher_path, launcher_args = bass.settings['bash.launchers'][launcher_name]
-            work_dispatcher.submit(_create_launcher_button, launcher_path, launcher_name,
-                shlex.split(launcher_args))
-        work_dispatcher.shutdown(wait=True)
 
     #--Final couple
     all_links.append(DocBrowserButton('DocBrowser'))
